@@ -59,12 +59,31 @@ var CVEngine = (function () {
   function ehVeiculo(m) { return semAc(m) === semAc(MODALIDADE_VEICULOS); }
   function semAc(s) { return norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   var CAT_PRODUTOS = 'Compra de Peças', CAT_SERVICOS = 'Prestação de Serviços', CAT_AMBOS = 'Peças + Serviços', CAT_CONSUMIVEIS = 'Consumíveis';
-  var TIPOS_COMPRA = [CAT_PRODUTOS, CAT_SERVICOS, CAT_AMBOS, CAT_CONSUMIVEIS];
+  var TIPOS_COMPRA = [CAT_PRODUTOS, CAT_SERVICOS, CAT_AMBOS, CAT_CONSUMIVEIS];   // Manutenção de Veículos
+  var CAT_MAT_SERV = 'Materiais + Serviços';
+  // Categorias das demais modalidades.  p = só itens · s = só serviços · a = itens + serviços
+  var CATEGORIAS_GERAIS = [
+    ['Materiais de Escritório', 'p'], ['Materiais de Limpeza e Higiene', 'p'], ['EPI e Uniformes', 'p'], ['Embalagens e Coletores', 'p'],
+    ['Equipamentos e Ferramentas', 'p'], ['Informática e Tecnologia', 'p'], ['Consumíveis Operacionais', 'p'], ['Copa e Alimentação', 'p'],
+    ['Prestação de Serviços', 's'], [CAT_MAT_SERV, 'a'], ['Outras Compras', 'p']
+  ];
+  var TIPO_CAT = {}; CATEGORIAS_GERAIS.forEach(function (c) { TIPO_CAT[c[0]] = c[1]; });
+  TIPO_CAT[CAT_PRODUTOS] = 'p'; TIPO_CAT[CAT_SERVICOS] = 's'; TIPO_CAT[CAT_AMBOS] = 'a'; TIPO_CAT[CAT_CONSUMIVEIS] = 'p';
+  /** Categorias oferecidas para a modalidade */
+  function categoriasDe(modalidade) { return ehVeiculo(modalidade) ? TIPOS_COMPRA.slice() : CATEGORIAS_GERAIS.map(function (c) { return c[0]; }); }
   var CAT_ANTIGAS = { 'Compra de Produtos': CAT_PRODUTOS, 'Ambos (Produtos + Serviços)': CAT_AMBOS };   // nomes da v2.9
-  function temProdutos(cat) { return cat !== CAT_SERVICOS; }
-  function temServicos(cat) { return cat === CAT_SERVICOS || cat === CAT_AMBOS; }
+  function temProdutos(cat) { return (TIPO_CAT[cat] || 'p') !== 's'; }
+  function temServicos(cat) { var t = TIPO_CAT[cat]; return t === 's' || t === 'a'; }
   /** Título do quadro de itens conforme a categoria */
-  function rotuloProdutos(cat) { return cat === CAT_CONSUMIVEIS ? 'Consumíveis' : (cat === CAT_PRODUTOS || cat === CAT_AMBOS) ? 'Peças' : 'Itens'; }
+  function rotuloProdutos(cat) { return cat === CAT_CONSUMIVEIS ? 'Consumíveis' : (cat === CAT_PRODUTOS || cat === CAT_AMBOS) ? 'Peças' : cat === CAT_MAT_SERV ? 'Materiais' : 'Itens'; }
+  // Listas de validação: Gerentes destes departamentos NÃO criam/removem valores (Departamento, Modalidade, Centro de custo, Categoria...)
+  var DEPARTAMENTOS_SEM_EDICAO_LISTAS = ['Operacional'];
+  function podeEditarListas(u) {
+    if (!u) return false;
+    if (ehSuperAdmin(u)) return true;
+    if (nivelDe(u) < 3) return false;
+    return !DEPARTAMENTOS_SEM_EDICAO_LISTAS.some(function (d) { return norm(d) === norm(u.departamento); });
+  }
   var TIPOS_MANUTENCAO = ['Manutenção Preventiva', 'Manutenção Corretiva', 'Pneus', 'Funilaria', 'Outros'];
   function linhaListaVazia() { var r = {}; Object.keys(TIPOS_LISTA).forEach(function (k) { r[k] = ''; }); return r; }
 
@@ -326,7 +345,8 @@ var CVEngine = (function () {
     var modalidade = txt(d.modalidade), veic = ehVeiculo(modalidade), cat = txt(d.categoria), tipoMan = '';
     if (!modalidade) erro('Informe a modalidade.');
     if (!txt(d.centroCusto)) erro(veic ? 'Informe a placa do veículo (centro de custo).' : 'Informe o centro de custo.');
-    if (TIPOS_COMPRA.indexOf(cat) < 0) erro('Informe a categoria: ' + TIPOS_COMPRA.join(', ') + '.');
+    var catsOk = categoriasDe(modalidade);
+    if (catsOk.indexOf(cat) < 0) erro('Informe a categoria: ' + catsOk.join(', ') + '.');
     if (veic) {
       var pl = (db.Placas || []).filter(function (x) { return norm(x.placa) === norm(d.centroCusto); })[0];
       if (!pl || pl.ativo === false) erro('Placa "' + txt(d.centroCusto) + '" não encontrada entre as placas ativas da frota.');
@@ -652,8 +672,8 @@ var CVEngine = (function () {
         extra.msg = 'Senha alterada.';
         break;
       }
-      case 'addLista': exigir(u, 3); addLista(db, p.tipo, p.valor); extra.salvo = txt(p.valor); break;
-      case 'removeLista': exigir(u, 3); removeLista(db, p.tipo, p.valor); break;
+      case 'addLista': if (!podeEditarListas(u)) erro('Seu perfil não pode alterar as listas.'); addLista(db, p.tipo, p.valor); extra.salvo = txt(p.valor); break;
+      case 'removeLista': if (!podeEditarListas(u)) erro('Seu perfil não pode alterar as listas.'); removeLista(db, p.tipo, p.valor); break;
       default: erro('Ação desconhecida: ' + action);
     }
     return estado(db, u, extra);
@@ -802,7 +822,7 @@ var CVEngine = (function () {
       var mod = CC_POR_CAT[c[2]] || 'Operações - Coleta', veic = ehVeiculo(mod) || /frota/i.test(c[0]);
       if (veic) mod = MODALIDADE_VEICULOS;
       var r = criar(db, criador, {
-        modalidade: mod, centroCusto: veic ? PLACAS_DEMO[Math.floor(rnd() * PLACAS_DEMO.length)][0] : criador.filial, categoria: serv ? CAT_SERVICOS : CAT_PRODUTOS,
+        modalidade: mod, centroCusto: veic ? PLACAS_DEMO[Math.floor(rnd() * PLACAS_DEMO.length)][0] : criador.filial, categoria: serv ? CAT_SERVICOS : (veic ? CAT_PRODUTOS : ({ 'EPI': 'EPI e Uniformes', 'Embalagens e coletores': 'Embalagens e Coletores', 'TI': 'Informática e Tecnologia', 'Escritório': 'Materiais de Escritório', 'Equipamentos': 'Equipamentos e Ferramentas' }[c[2]] || 'Outras Compras')),
         tipoManutencao: veic ? (c[2] === 'Combustível' ? 'Outros' : /pneu/i.test(c[0]) ? 'Pneus' : 'Manutenção Preventiva') : '', tipoManutencaoOutro: 'Abastecimento', fornecedor: c[3], condicaoPagamento: ['PIX', 'Boleto 28 dias', 'Boleto 30/60/90 dias'][Math.floor(rnd() * 3)], cidade: String(criador.filial).replace(/ \(.*\)/, '') + '/SP',
         urgencia: '', dataNecessidade: '', prazoEntrega: ['5 dias úteis', '10 dias', 'Imediato', '15 dias'][Math.floor(rnd() * 4)], valorFrete: rnd() < 0.4 ? r2(entre(30, 180)) : 0,
         justificativa: 'Reposição para continuidade da operação.', itens: itens
@@ -826,7 +846,7 @@ var CVEngine = (function () {
     novoDb: novoDb, seed: seed, situacaoFornecedor: situacaoFornecedor, registrarHist: hist, manutencoesDemo: manutencoesDemo, STATUS_MANUTENCAO: STATUS_MANUTENCAO, resumoManutencao: resumoManutencao, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, podeVer: podeVer, limiteDoUsuario: limiteDoUsuario, limiteGerente: limiteGerente, maiorTetoGerente: maiorTetoGerente,
     migrar: migrar, sincronizarPlacas: sincronizarPlacas, ehVeiculo: ehVeiculo, TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_MANUTENCAO: TIPOS_MANUTENCAO, MODALIDADE_VEICULOS: MODALIDADE_VEICULOS,
-    CAT_PRODUTOS: CAT_PRODUTOS, CAT_SERVICOS: CAT_SERVICOS, CAT_AMBOS: CAT_AMBOS, CAT_CONSUMIVEIS: CAT_CONSUMIVEIS, rotuloProdutos: rotuloProdutos, temProdutos: temProdutos, temServicos: temServicos, norm: norm, r2: r2
+    categoriasDe: categoriasDe, podeEditarListas: podeEditarListas, CAT_PRODUTOS: CAT_PRODUTOS, CAT_SERVICOS: CAT_SERVICOS, CAT_AMBOS: CAT_AMBOS, CAT_CONSUMIVEIS: CAT_CONSUMIVEIS, rotuloProdutos: rotuloProdutos, temProdutos: temProdutos, temServicos: temServicos, norm: norm, r2: r2
   };
 })();
 if (typeof window !== 'undefined') window.CVEngine = CVEngine;

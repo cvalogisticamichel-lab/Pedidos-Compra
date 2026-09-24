@@ -496,13 +496,6 @@
         <div class="kpi"><div class="lbl">Solicitado no mês</div><div class="val">${brl(doMes.reduce((s, r) => s + Number(r.total), 0))}</div><div class="sub">${doMes.length} pedido(s)</div></div>
         <div class="kpi"><div class="lbl">${u.nivel >= 2 ? 'Para eu autorizar' : 'Aguardando compra'}</div><div class="val">${u.nivel >= 2 ? pend.length : minhas.filter(r => r.status === 'aprovado').length}</div><div class="sub">${u.nivel >= 2 ? brl(pend.reduce((s, r) => s + Number(r.total), 0)) : 'aprovadas, ainda não compradas'}</div></div>
       </div>
-      <div class="card">
-        <div class="card-head"><h2>Alçadas de aprovação</h2></div>
-        <div class="alcada">
-          ${[1, 2].map(n => `<div class="lvl ${n === u.nivel ? 'me' : ''}"><span class="small muted">${esc(S.nomeNivel(n))}</span><b>até ${brl(lim[n])}</b></div>`).join('')}
-          ${(S.listas().departamento || []).map(d => `<div class="lvl ${nv(u) === 3 && S.norm(d) === S.norm(u.departamento) ? 'me' : ''}"><span class="small muted">Gerente · ${esc(d)}</span><b>até ${brl(S.limiteGerente(d))}</b></div>`).join('')}
-          <div class="lvl"><span class="small muted">${esc(C.instanciaSuperior)}</span><b>acima de ${brl(S.maiorTetoGerente())}</b></div>
-        </div>
       </div>
       ${u.nivel >= 2 && pend.length ? `<div class="card"><div class="card-head"><h2>Aguardando sua autorização${nv(u) >= 3 && u.departamento ? ' · ' + esc(u.departamento) + ' primeiro' : ''}</h2><a href="#/aprovacoes" class="small">Ver todas</a></div>${tabela(pendDep.concat(pend.filter(r => !pendDep.includes(r))).slice(0, 5))}</div>` : ''}
       <div class="card"><div class="card-head"><h2>Minhas últimas solicitações</h2><a href="#/solicitacoes" class="small">Ver todas</a></div>
@@ -655,7 +648,7 @@
     const novoItem = () => ({ itemId: '', descricao: '', qtd: 1, unidade: 'un', valorUnit: '' });
     const itens = [novoItem()];
     const lim = S.limites();
-    const addOpt = nv(u) >= 3 ? '<option value="__novo__">+ Adicionar novo…</option>' : '';
+    const addOpt = S.podeEditarListas(u) ? '<option value="__novo__">+ Adicionar novo…</option>' : '';
     const sel = (tipo, label, valor) => `<div><label>${label} *</label><select name="${tipo}" data-lista="${tipo}" required><option value="">Selecione…</option>${opts(L[tipo], L[tipo].includes(valor) ? valor : '')}${addOpt}</select></div>`;
     el.innerHTML = `
       <div class="page-head"><div><h1>Nova solicitação de compra</h1><p>Preencha os dados, o fornecedor e os itens. O fluxo de aprovação é definido automaticamente pelo valor total.</p></div></div>
@@ -666,7 +659,7 @@
             ${sel('departamento', 'Departamento', u.departamento)}
             ${sel('modalidade', 'Modalidade')}
             <div><label id="ccLbl">Centro de custo *</label><select name="centroCusto" id="selCC" required></select><div class="campo-hint muted" id="ccHint"></div></div>
-            <div><label>Categoria *</label><select name="categoria" required><option value="">Selecione…</option>${opts(S.TIPOS_COMPRA)}</select></div>
+            <div><label>Categoria *</label><select name="categoria" required><option value="">Escolha a modalidade primeiro</option></select></div>
           </div>
           <fieldset class="fs-limpo grid g2" id="boxVeic" hidden disabled style="margin-top:12px">
             <div><label>Tipo de manutenção *</label><select name="tipoManutencao" required><option value="">Selecione…</option>${opts(S.TIPOS_MANUTENCAO)}</select></div>
@@ -973,6 +966,10 @@
     const montarCC = () => {
       const veic = S.ehVeiculo(modSel.value);
       boxVeic.hidden = boxVeic.disabled = !veic;
+      // categorias: as de veículos só para Manutenção de Veículos; as gerais para as demais modalidades
+      const cats = modSel.value ? S.categoriasDe(modSel.value) : [], catAnt = catSel.value;
+      catSel.innerHTML = '<option value="">' + (modSel.value ? 'Selecione…' : 'Escolha a modalidade primeiro') + '</option>' + opts(cats, cats.includes(catAnt) ? catAnt : '');
+      if (typeof aplicarCategoria === 'function') aplicarCategoria();
       el.querySelector('#ccLbl').textContent = veic ? 'Centro de custo (placa) *' : 'Centro de custo *';
       const hint = el.querySelector('#ccHint');
       if (veic) {
@@ -1712,7 +1709,8 @@
       </div>
       <div class="card">
         <div class="card-head"><h2>Listas de validação</h2><span class="small muted">${S.modo === 'google' ? 'gravadas na aba "Listas" da planilha' : 'base de dados das listas'}</span></div>
-        <div class="listas-cards">${Object.keys(NOME_LISTA).map(t => `<div class="lista-box" data-tipo="${t}">
+        ${S.podeEditarListas(u) ? '' : '<p class="small muted" style="margin:-6px 0 10px">Somente consulta: seu perfil não altera as listas.</p>'}
+        <div class="listas-cards">${Object.keys(NOME_LISTA).map(t => `<div class="lista-box${S.podeEditarListas(u) ? '' : ' so-ver'}" data-tipo="${t}">
           <h3>${NOME_LISTA[t]} <span class="qtd">${S.listas()[t].length} itens</span></h3>
           <div class="linha">
             <select class="sel-lista" aria-label="Valores de ${NOME_LISTA[t]}">${opts(S.listas()[t])}</select>

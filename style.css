@@ -455,3 +455,4 @@ fieldset.fs-limpo { border: 0; padding: 0; margin-bottom: 0; }
 .popup-ico { width: 46px; height: 46px; border-radius: 50%; background: #fff3e0; color: #b46a00; display: flex; align-items: center; justify-content: center; }
 .destaque-cred { outline: 3px solid #f0a020; outline-offset: 2px; }
 .cred-alteracoes { background: #fff8ec; border: 1px solid #f3d9a6; border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.5; }
+.lista-box.so-ver [data-rml], .lista-box.so-ver form.addl { display: none; }

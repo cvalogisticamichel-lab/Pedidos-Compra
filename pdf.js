@@ -121,7 +121,7 @@ window.CVPdf = (function () {
       alternateRowStyles: { fillColor: [247, 251, 248] }
     };
     if (prods.length) {
-      y = secao(/consum/i.test(r.categoria || '') ? 'Consumíveis' : /pe[cç]as/i.test(r.categoria || '') ? 'Peças' : 'Itens', y + 4);
+      y = secao(window.CVEngine ? CVEngine.rotuloProdutos(r.categoria) : 'Itens', y + 4);
       doc.autoTable(Object.assign({}, estilo, {
         startY: y,
         columnStyles: { 0: { cellWidth: 9, halign: 'center' }, 2: { halign: 'right', cellWidth: 18 }, 3: { cellWidth: 14 }, 4: { halign: 'right', cellWidth: 28 }, 5: { halign: 'right', cellWidth: 30 } },
