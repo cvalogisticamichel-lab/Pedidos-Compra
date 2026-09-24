@@ -16,7 +16,7 @@ var CVEngine = (function () {
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
     Itens: ['id', 'codigo', 'descricao', 'unidade', 'categoria', 'fornecedorPreferido', 'ultimoPreco', 'ultimaCompra', 'ativo', 'criadoEm'],
-    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade'],
+    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual'],
     Listas: ['filial', 'centroCusto', 'categoria', 'unidade'],
     Historico_Precos: ['em', 'itemId', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero', 'solicitacaoId'],
     Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm'],
@@ -26,7 +26,7 @@ var CVEngine = (function () {
   var NUMEROS = ['nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
   var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra'];
   var BOOLEANOS = ['ativo'];
-  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade'];
+  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual'];
 
   var PADRAO = { limites: { 1: 2000, 2: 10000, 3: 50000 } };
   var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria' };
@@ -142,19 +142,37 @@ var CVEngine = (function () {
     return txt(s);
   }
   function titulo(s) { return txt(s).toLowerCase().replace(/(^|\s)\S/g, function (m) { return m.toUpperCase(); }).replace(/ (De|Da|Do|Das|Dos|E) /g, function (m) { return m.toLowerCase(); }); }
-  /** Converte a resposta da BrasilAPI ou da ReceitaWS para um formato único */
+  function fmtTel(t) {
+    t = digitos(t);
+    return /^\d{10,11}$/.test(t) ? '(' + t.slice(0, 2) + ') ' + t.slice(2, t.length - 4) + '-' + t.slice(-4) : t;
+  }
+  /** Converte a resposta da CNPJá (open), BrasilAPI ou ReceitaWS para um formato único */
   function normalizarCnpj(j) {
     if (!j) erro('CNPJ não encontrado.');
     if (j.status === 'ERROR') erro(j.message || 'CNPJ não encontrado.');
-    var tel = j.ddd_telefone_1 ? digitos(j.ddd_telefone_1) : txt(j.telefone);
-    if (/^\d{10,11}$/.test(tel)) tel = '(' + tel.slice(0, 2) + ') ' + tel.slice(2, tel.length - 4) + '-' + tel.slice(-4);
+    if (j.taxId || j.company) { // CNPJá
+      var a = j.address || {}, ie = '';
+      var regs = (j.registrations || []).filter(function (r) { return r && r.number; });
+      var r1 = regs.filter(function (r) { return r.enabled !== false && (!a.state || r.state === a.state); })[0] || regs[0];
+      if (r1) ie = txt(r1.number);
+      var ph = (j.phones || [])[0];
+      return {
+        cnpj: formatarDoc(j.taxId), razaoSocial: txt(j.company && j.company.name), nomeFantasia: txt(j.alias),
+        situacao: txt(j.status && j.status.text).toUpperCase(),
+        endereco: [a.street, a.number, a.details, a.district].map(txt).filter(Boolean).join(', '),
+        cidade: txt(a.city), uf: txt(a.state).toUpperCase(), cep: txt(a.zip),
+        telefone: ph ? fmtTel(txt(ph.area) + txt(ph.number)) : '', email: txt(((j.emails || [])[0] || {}).address).toLowerCase(),
+        atividade: txt(j.mainActivity && j.mainActivity.text), inscricaoEstadual: ie
+      };
+    }
+    var tel = j.ddd_telefone_1 ? fmtTel(j.ddd_telefone_1) : txt(j.telefone);
     var ativ = j.cnae_fiscal_descricao || (j.atividade_principal && j.atividade_principal[0] && j.atividade_principal[0].text) || '';
     return {
       cnpj: formatarDoc(j.cnpj), razaoSocial: txt(j.razao_social || j.nome), nomeFantasia: txt(j.nome_fantasia || j.fantasia),
       situacao: txt(j.descricao_situacao_cadastral || j.situacao).toUpperCase(),
       endereco: [j.logradouro, j.numero, j.complemento, j.bairro].map(txt).filter(Boolean).join(', '),
       cidade: titulo(j.municipio), uf: txt(j.uf).toUpperCase(), cep: txt(j.cep),
-      telefone: tel, email: txt(j.email).toLowerCase(), atividade: txt(ativ)
+      telefone: tel, email: txt(j.email).toLowerCase(), atividade: txt(ativ), inscricaoEstadual: ''
     };
   }
 
@@ -329,7 +347,7 @@ var CVEngine = (function () {
           if (fdoc) erro('Este CNPJ/CPF já está cadastrado para "' + fdoc.nome + '".');
         }
         var campos = { nome: txt(f.nome), cnpj: formatarDoc(doc), contato: txt(f.contato), telefone: txt(f.telefone), email: txt(f.email), cidade: txt(f.cidade), categorias: txt(f.categorias),
-          nomeFantasia: txt(f.nomeFantasia), endereco: txt(f.endereco), uf: txt(f.uf).toUpperCase(), cep: txt(f.cep), situacao: txt(f.situacao), atividade: txt(f.atividade) };
+          nomeFantasia: txt(f.nomeFantasia), endereco: txt(f.endereco), uf: txt(f.uf).toUpperCase(), cep: txt(f.cep), situacao: txt(f.situacao), atividade: txt(f.atividade), inscricaoEstadual: txt(f.inscricaoEstadual) };
         var fx;
         if (f.id) { fx = porId(db.Fornecedores, f.id); if (!fx) erro('Fornecedor não encontrado.'); for (var k in campos) fx[k] = campos[k]; }
         else { fx = campos; campos.id = ctx.uuid(); campos.ativo = true; campos.criadoEm = agora(); db.Fornecedores.push(campos); }
