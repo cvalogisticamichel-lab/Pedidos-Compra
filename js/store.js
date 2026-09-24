@@ -253,14 +253,14 @@
     // leitura (síncrona, a partir do último estado)
     limites: () => st.limites,
     limiteDoNivel: n => Number(st.limites[n]) || 0,
-    nomeNivel: n => (n >= 4 ? C.instanciaSuperior : (C.niveis[n] ? C.niveis[n].nome : '—')),
+    nomeNivel: n => (Number(n) === 5 ? 'Financeiro' : n >= 4 ? C.instanciaSuperior : (C.niveis[n] ? C.niveis[n].nome : '—')),
     nivelNecessario: total => E.nivelNecessario(st.limites, total),
     podeAprovar: (u, r) => E.podeAprovar(u, r),
     calcTotal: itens => E.r2((itens || []).reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.valorUnit) || 0), 0)),
     listRequests: () => st.requests.slice(),
     getRequest: id => st.requests.find(r => r.id === id) || null,
     listUsers: () => st.users.slice(),
-    listas: () => (st && st.listas) || { filial: C.filiais, centroCusto: C.centrosCusto, categoria: C.categorias, unidade: C.unidadesMedida },
+    listas: () => (st && st.listas) || { filial: C.filiais, centroCusto: C.centrosCusto, categoria: C.categorias, unidade: C.unidadesMedida, departamento: C.departamentos || ['Logística', 'Administrativo', 'Comercial', 'Operacional'] },
     digitos: E.digitos, cnpjValido: E.cnpjValido, cpfValido: E.cpfValido,
     /** Consulta CNPJ: BrasilAPI direto do navegador; se falhar, via servidor Google (BrasilAPI/ReceitaWS). */
     async consultaCnpj(cnpj) {
@@ -293,7 +293,7 @@
     norm: E.norm,
 
     exportCSV() {
-      return csv(st.requests, ['numero', 'criadoEm', 'status', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'fornecedorFinal', 'urgencia', 'total', 'nivelNecessario', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm']);
+      return csv(st.requests, ['numero', 'criadoEm', 'status', 'solicitanteNome', 'nivelSolicitante', 'departamento', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'fornecedorFinal', 'prazoEntrega', 'valorFrete', 'total', 'nivelNecessario', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'numeroPdf', 'emailEnviadoEm']);
     },
     exportPrecosCSV() { return csv(st.precos, ['em', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero']); },
     exportJSON() { return JSON.stringify({ exportadoEm: new Date().toISOString(), empresa: C.empresa, solicitacoes: st.requests, itens: st.catalogo, fornecedores: st.fornecedores, precos: st.precos }, null, 2); },

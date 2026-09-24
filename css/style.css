@@ -425,3 +425,10 @@ a.kpi-link { text-decoration: none; color: inherit; display: block; }
 a.kpi-link:hover { border-color: var(--verde-500); }
 tr.click[data-id] td:first-child b { white-space: nowrap; }
 @media (max-width: 1280px) { .hide-md { display: none; } }
+
+/* ===== v2.8 — Financeiro (somente consulta), departamentos, frete ===== */
+body.consulta #novo, body.consulta #novoU, body.consulta [data-ed], body.consulta [data-tg],
+body.consulta a[href="#/nova"], body.consulta .orc-form, body.consulta [data-rmorc] { display: none !important; }
+.filtro-dep { margin: -4px 0 10px; }
+.filtro-dep select { max-width: 280px; }
+#vFrete { margin-top: 2px; }

@@ -101,6 +101,14 @@
   window.addEventListener('hashchange', () => render());
 
   function pendentesParaMim(u) { return S.listRequests().filter(r => S.podeAprovar(u, r)); }
+  // Financeiro (nível 5): somente consulta
+  const FIN = u => Number(u && u.nivel) === 5;
+  const nv = u => (FIN(u) ? 0 : Number(u && u.nivel) || 0);
+  const NIVEIS_PERFIL = [1, 2, 3, 5];
+  // Gerente: é avisado só das pendências do próprio departamento (sem departamento definido = todas)
+  const gerentesDoDep = dep => S.listUsers().filter(x => Number(x.nivel) === 3 && x.ativo !== false && S.norm(x.departamento) === S.norm(dep));
+  const doMeuDep = (u, r) => !u.departamento || !r.departamento || S.norm(r.departamento) === S.norm(u.departamento) || (S.listUsers().length && !gerentesDoDep(r.departamento).length);
+  function avisosParaMim(u) { const l = pendentesParaMim(u); return nv(u) >= 3 ? l.filter(r => doMeuDep(u, r)) : l; }
 
   // ========== CARREGANDO ==========
   function renderCarregando(msg) {
@@ -202,7 +210,10 @@
           <div class="pa-etapas"><span class="ok">1 · E-mail</span><span class="on">2 · Cadastro</span><span>3 · Aprovação</span></div>
           <div class="pa-email">${icon('check', 16)} ${esc(v.email)} <button type="button" class="btn-mini" id="paTroca">trocar</button></div>
           <div class="field"><label>Nome completo *</label><input name="nome" required value="${esc(v.nomeSugerido || '')}" placeholder="Nome e sobrenome"></div>
-          <div class="field"><label>CPF *</label><input name="cpf" required inputmode="numeric" placeholder="000.000.000-00" maxlength="14"><div class="campo-hint" id="cpfHint"></div></div>
+          <div class="grid g2">
+            <div><label>CPF *</label><input name="cpf" required inputmode="numeric" placeholder="000.000.000-00" maxlength="14"><div class="campo-hint" id="cpfHint"></div></div>
+            <div><label>Departamento *</label><select name="departamento" required><option value="">Selecione…</option>${opts(S.listas().departamento || [])}</select></div>
+          </div>
           <div class="grid g2">
             <div><label>Senha * <span class="muted small">(mín. 6)</span></label><input name="senha" type="password" required minlength="6" autocomplete="new-password"></div>
             <div><label>Confirmar senha *</label><input name="confirmacao" type="password" required autocomplete="new-password"></div>
@@ -220,17 +231,18 @@
           const okSenha = s1.length >= 6 && s1 === s2;
           box.querySelector('#senhaHint').innerHTML = !s2 ? '' : s1 !== s2 ? '<span class="warn">As senhas não são iguais</span>' : s1.length < 6 ? '<span class="warn">A senha precisa ter ao menos 6 caracteres</span>' : '<span class="ok">✓ As senhas conferem</span>';
           const okNome = fc.nome.value.trim().split(/\s+/).length >= 2;
-          fc.querySelector('#paEnviar').disabled = !(okCpf && okSenha && okNome);
+          fc.querySelector('#paEnviar').disabled = !(okCpf && okSenha && okNome && fc.departamento.value);
         };
         fc.cpf.addEventListener('input', () => { fc.cpf.value = mascaraCpf(fc.cpf.value); validar(); });
         ['nome', 'senha', 'confirmacao'].forEach(k => fc[k].addEventListener('input', validar));
+        fc.departamento.addEventListener('change', validar);
         (v.nomeSugerido ? fc.cpf : fc.nome).focus();
         fc.addEventListener('submit', async e => {
           e.preventDefault();
           const b = fc.querySelector('#paEnviar'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Enviando…';
           mostrarCarregando('Enviando cadastro…');
           try {
-            const r = await S.solicitarAcesso({ email: v.email, nome: fc.nome.value, cpf: fc.cpf.value, senha: fc.senha.value, confirmacao: fc.confirmacao.value });
+            const r = await S.solicitarAcesso({ email: v.email, nome: fc.nome.value, cpf: fc.cpf.value, departamento: fc.departamento.value, senha: fc.senha.value, confirmacao: fc.confirmacao.value });
             esconderCarregando();
             passoFim(r);
           } catch (err) { esconderCarregando(); box.querySelector('#paErro').textContent = err.message; b.disabled = false; b.textContent = 'Enviar cadastro para aprovação'; }
@@ -257,12 +269,14 @@
     document.querySelectorAll('.modal-bg').forEach(m => m.remove());
     acFechar();
     const rota = rotaAtual();
-    const disp = ROTAS.filter(r => u.nivel >= r.nivel);
+    const disp = ROTAS.filter(r => FIN(u) ? r.nivel <= 1 && r.id !== 'nova' : u.nivel >= r.nivel);
+    document.body.classList.toggle('consulta', FIN(u));
     const r = disp.find(x => x.id === rota.id) || disp[0];
-    const nPend = u.nivel >= 2 ? pendentesParaMim(u).length : S.listRequests().filter(x => x.status === 'pendente' && x.solicitanteId === u.id).length;
-    const nAcessos = u.nivel >= 3 ? S.acessosPendentes() : 0;
-    const nForn = u.nivel >= 3 ? S.fornecedoresPendentes() : 0;
-    const nNotif = nAcessos + nForn;
+    const nPend = FIN(u) ? 0 : nv(u) >= 2 ? avisosParaMim(u).length : S.listRequests().filter(x => x.status === 'pendente' && x.solicitanteId === u.id).length;
+    const nAcessos = nv(u) >= 3 ? S.acessosPendentes() : 0;
+    const nForn = nv(u) >= 3 ? S.fornecedoresPendentes() : 0;
+    const nMeuDep = nv(u) >= 3 ? nPend : 0;
+    const nNotif = nAcessos + nForn + nMeuDep;
 
     root.innerHTML = `
     <div class="app">
@@ -278,9 +292,9 @@
           <div class="mobile-brand">${M.logo(false)}</div>
           <h2 class="page-title-desk">${esc(r.nome)}</h2>
           <div class="user-chip">
-            ${u.nivel >= 3 ? `<a class="btn btn-ghost btn-sm sino${nNotif ? ' tem' : ''}" href="#/${nAcessos || !nForn ? 'acessos' : 'credenciamento'}" title="${[nAcessos ? nAcessos + ' usuário(s) aguardando aprovação' : '', nForn ? nForn + ' fornecedor(es) aguardando credenciamento' : ''].filter(Boolean).join(' · ') || 'Sem notificações'}">${icon('bell', 18)}${nNotif ? `<span class="sino-n">${nNotif}</span>` : ''}</a>` : ''}
+            ${nv(u) >= 3 ? `<a class="btn btn-ghost btn-sm sino${nNotif ? ' tem' : ''}" href="#/${nMeuDep ? 'aprovacoes' : nAcessos || !nForn ? 'acessos' : 'credenciamento'}" title="${[nMeuDep ? nMeuDep + ' solicitação(ões) do seu departamento aguardando autorização' : '', nAcessos ? nAcessos + ' usuário(s) aguardando aprovação' : '', nForn ? nForn + ' fornecedor(es) aguardando credenciamento' : ''].filter(Boolean).join(' · ') || 'Sem notificações'}">${icon('bell', 18)}${nNotif ? `<span class="sino-n">${nNotif}</span>` : ''}</a>` : ''}
             <button class="btn btn-ghost btn-sm" id="btnSync" title="Atualizar dados">${icon('sync', 18)}</button>
-            <div class="who"><b>${esc(u.nome)}</b><span class="nivel-tag">${esc(S.nomeNivel(u.nivel))}</span></div>
+            <div class="who"><b>${esc(u.nome)}</b><span class="nivel-tag">${esc(S.nomeNivel(u.nivel))}${u.departamento ? ' · ' + esc(u.departamento) : ''}</span></div>
             <button class="avatar" id="btnPerfil" title="Minha conta">${iniciais(u.nome)}</button>
             <button class="btn btn-ghost btn-sm" id="btnSair" title="Sair">${icon('out', 18)}</button>
           </div>
@@ -324,7 +338,7 @@
     const u = S.user();
     abrirGaveta(`
       <div class="card-head" style="margin:0"><div><div class="small muted">Minha conta</div><h1>${esc(u.nome)}</h1></div>${btnFechar}</div>
-      <p class="muted">${esc(u.email)} · ${esc(S.nomeNivel(u.nivel))} · alçada ${brl(S.limiteDoNivel(u.nivel))}</p>
+      <p class="muted">${esc(u.email)} · ${esc(S.nomeNivel(u.nivel))}${u.departamento ? ' · ' + esc(u.departamento) : ''}${FIN(u) ? ' · somente consulta' : ' · alçada ' + brl(S.limiteDoNivel(u.nivel))}</p>
       <form id="fSenha" class="card" style="margin-top:16px">
         <h2 style="margin-bottom:12px">Alterar senha</h2>
         <div class="field"><label>Senha atual</label><input type="password" name="atual" required autocomplete="current-password"></div>
@@ -459,7 +473,9 @@
     const todas = S.listRequests();
     const minhas = todas.filter(r => r.solicitanteId === u.id);
     const pend = pendentesParaMim(u);
+    const pendDep = avisosParaMim(u);
     const lim = S.limites();
+    if (FIN(u)) return vInicioFinanceiro(el, u, todas);
     const mesAtual = new Date().toISOString().slice(0, 7);
     const doMes = minhas.filter(r => String(r.criadoEm).slice(0, 7) === mesAtual);
     el.innerHTML = `
@@ -467,8 +483,9 @@
         <div><h1>Olá, ${esc(u.nome.split(' ')[0])}!</h1><p>Resumo das suas solicitações de compra.</p></div>
         <a class="btn btn-accent" href="#/nova">${icon('plus', 18)} Nova solicitação</a>
       </div>
-      ${u.nivel >= 3 && S.acessosPendentes() ? `<a class="aviso-acesso" href="#/acessos">${icon('bell', 20)}<div><b>${S.acessosPendentes()} novo(s) cadastro(s) aguardando sua aprovação</b><div class="small">Defina o perfil (Comprador, Supervisor ou Gerente) para liberar o acesso.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
-      ${u.nivel >= 3 && S.fornecedoresPendentes() ? `<a class="aviso-acesso" href="#/credenciamento">${icon('truck', 20)}<div><b>${S.fornecedoresPendentes()} fornecedor(es) aguardando credenciamento</b><div class="small">Confira os dados e credencie ou recuse.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
+      ${nv(u) >= 3 && pendDep.length ? `<a class="aviso-acesso" href="#/aprovacoes">${icon('check', 20)}<div><b>${pendDep.length} solicitação(ões)${u.departamento ? ' do departamento ' + esc(u.departamento) : ''} aguardando sua autorização</b><div class="small">${brl(pendDep.reduce((s, r) => s + Number(r.total), 0))} no total.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
+      ${nv(u) >= 3 && S.acessosPendentes() ? `<a class="aviso-acesso" href="#/acessos">${icon('bell', 20)}<div><b>${S.acessosPendentes()} novo(s) cadastro(s) aguardando sua aprovação</b><div class="small">Defina o perfil e o departamento para liberar o acesso.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
+      ${nv(u) >= 3 && S.fornecedoresPendentes() ? `<a class="aviso-acesso" href="#/credenciamento">${icon('truck', 20)}<div><b>${S.fornecedoresPendentes()} fornecedor(es) aguardando credenciamento</b><div class="small">Confira os dados e credencie ou recuse.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
       <div class="kpis">
         <div class="kpi destaque"><div class="lbl">Sua alçada</div><div class="val">${brl(lim[u.nivel])}</div><div class="sub">Aprova sozinho até este valor</div></div>
         <a class="kpi kpi-link" href="#/aprovacoes"><div class="lbl">Minhas aguardando</div><div class="val">${minhas.filter(r => r.status === 'pendente').length}</div><div class="sub">aguardando autorização</div></a>
@@ -482,10 +499,30 @@
           <div class="lvl"><span class="small muted">${esc(C.instanciaSuperior)}</span><b>acima de ${brl(lim[3])}</b></div>
         </div>
       </div>
-      ${u.nivel >= 2 && pend.length ? `<div class="card"><div class="card-head"><h2>Aguardando sua autorização</h2><a href="#/aprovacoes" class="small">Ver todas</a></div>${tabela(pend.slice(0, 5))}</div>` : ''}
+      ${u.nivel >= 2 && pend.length ? `<div class="card"><div class="card-head"><h2>Aguardando sua autorização${nv(u) >= 3 && u.departamento ? ' · ' + esc(u.departamento) + ' primeiro' : ''}</h2><a href="#/aprovacoes" class="small">Ver todas</a></div>${tabela(pendDep.concat(pend.filter(r => !pendDep.includes(r))).slice(0, 5))}</div>` : ''}
       <div class="card"><div class="card-head"><h2>Minhas últimas solicitações</h2><a href="#/solicitacoes" class="small">Ver todas</a></div>
         ${minhas.length ? tabela(minhas.slice(0, 6)) : '<div class="empty">Você ainda não criou solicitações.</div>'}
       </div>`;
+    bindLinhas(el);
+  }
+
+  function vInicioFinanceiro(el, u, todas) {
+    const soma = arr => arr.reduce((s, r) => s + Number(r.total), 0);
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const aut = todas.filter(r => ['aprovado', 'comprado'].includes(r.status));
+    const autMes = aut.filter(r => String(r.decididoEm).slice(0, 7) === mesAtual);
+    const pend = todas.filter(r => r.status === 'pendente');
+    const aComprar = todas.filter(r => r.status === 'aprovado');
+    el.innerHTML = `
+      <div class="page-head"><div><h1>Olá, ${esc(u.nome.split(' ')[0])}!</h1><p>Perfil Financeiro — acesso somente para consulta.</p></div></div>
+      <div class="kpis">
+        <div class="kpi destaque"><div class="lbl">Autorizado no mês</div><div class="val">${brl(soma(autMes))}</div><div class="sub">${autMes.length} pedido(s)</div></div>
+        <a class="kpi kpi-link" href="#/aprovacoes"><div class="lbl">Aguardando autorização</div><div class="val">${pend.length}</div><div class="sub">${brl(soma(pend))}</div></a>
+        <div class="kpi"><div class="lbl">Autorizados, não comprados</div><div class="val">${aComprar.length}</div><div class="sub">${brl(soma(aComprar))}</div></div>
+        <div class="kpi"><div class="lbl">Total autorizado</div><div class="val">${brl(soma(aut))}</div><div class="sub">${aut.length} pedido(s)</div></div>
+      </div>
+      <div class="card"><div class="card-head"><h2>Últimos pedidos autorizados</h2><a href="#/solicitacoes" class="small">Ver todas</a></div>
+        ${tabela(aut.slice().sort((a, b) => String(b.decididoEm).localeCompare(String(a.decididoEm))).slice(0, 8))}</div>`;
     bindLinhas(el);
   }
 
@@ -587,7 +624,7 @@
       .map(f => ({ titulo: f.nome, valor: f.nome, obj: f, sub: [f.nomeFantasia, f.cnpj, [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).join(' · ') }));
   }
   const prefillForn = q => (/^[\d.\/\-\s]+$/.test(q) ? { cnpj: q } : { nome: q });
-  const NOME_LISTA = { filial: 'Filial', centroCusto: 'Centro de custo', categoria: 'Categoria', unidade: 'Unidade' };
+  const NOME_LISTA = { departamento: 'Departamento', filial: 'Filial', centroCusto: 'Centro de custo', categoria: 'Categoria', unidade: 'Unidade' };
 
   /** Gerente: adiciona um valor novo a uma lista (Filial, Centro de custo...) */
   function novoValorLista(tipo, aoSalvar) {
@@ -613,14 +650,15 @@
     const novoItem = () => ({ itemId: '', descricao: '', qtd: 1, unidade: 'un', valorUnit: '' });
     const itens = [novoItem()];
     const lim = S.limites();
-    const addOpt = u.nivel >= 3 ? '<option value="__novo__">+ Adicionar novo…</option>' : '';
+    const addOpt = nv(u) >= 3 ? '<option value="__novo__">+ Adicionar novo…</option>' : '';
     const sel = (tipo, label, valor) => `<div><label>${label} *</label><select name="${tipo}" data-lista="${tipo}" required><option value="">Selecione…</option>${opts(L[tipo], L[tipo].includes(valor) ? valor : '')}${addOpt}</select></div>`;
     el.innerHTML = `
       <div class="page-head"><div><h1>Nova solicitação de compra</h1><p>Preencha os dados, o fornecedor e os itens. O fluxo de aprovação é definido automaticamente pelo valor total.</p></div></div>
       <form id="fNova">
         <div class="card card-compacto">
           <h2 class="card-titulo"><span class="passo">1</span> Dados gerais</h2>
-          <div class="grid g3">
+          <div class="grid g4">
+            ${sel('departamento', 'Departamento', u.departamento)}
             ${sel('filial', 'Filial', u.filial)}
             ${sel('centroCusto', 'Centro de custo')}
             ${sel('categoria', 'Categoria')}
@@ -637,6 +675,10 @@
             <div><label>Condição de pagamento *</label><select name="formaPgto" required><option value="">Selecione…</option>${opts(['PIX', 'Boleto', 'Transferência bancária', 'Cartão de crédito', 'Dinheiro'])}</select></div>
             <div id="prazoBox" hidden><label id="prazoLbl">Prazo do boleto (dias) *</label><input name="prazo" placeholder="Ex.: 28  ou  30/60/90"><div class="campo-hint muted" id="prazoHint">Para parcelas, separe os dias com barra: 30/60/90</div></div>
           </div>
+          <div class="grid g2" style="margin-top:14px">
+            <div><label>Prazo de entrega do produto / serviço *</label><input name="prazoEntrega" required placeholder="Ex.: 10 dias úteis, imediato, até 15/10"></div>
+            <div><label>Valor do frete (R$)</label><input name="valorFrete" type="number" min="0" step="0.01" placeholder="0,00 — deixe vazio se não houver"><div class="campo-hint muted">Somado ao valor total da solicitação.</div></div>
+          </div>
         </div>
         <div class="card">
           <div class="card-head"><h2 class="card-titulo" style="margin:0"><span class="passo">3</span> Itens</h2><button type="button" class="btn btn-ghost btn-sm" id="addItem">${icon('plus', 16)} Adicionar item</button></div>
@@ -646,7 +688,7 @@
             <tbody id="itensBody"></tbody>
           </table></div>
           <div class="total-bar">
-            <div><div class="small muted">Valor total</div><div class="v" id="vTotal">R$ 0,00</div></div>
+            <div><div class="small muted">Valor total</div><div class="v" id="vTotal">R$ 0,00</div><div class="small muted" id="vFrete"></div></div>
             <div id="hintAlcada" class="hint ok">Informe os itens para calcular a alçada.</div>
           </div>
         </div>
@@ -830,9 +872,13 @@
       });
       atualizarTotal();
     };
+    const freteIn = el.querySelector('[name=valorFrete]');
+    freteIn.addEventListener('input', () => atualizarTotal());
     const atualizarTotal = () => {
-      const total = S.calcTotal(itens);
+      const frete = Math.max(0, Number(freteIn.value) || 0), soItens = S.calcTotal(itens);
+      const total = soItens ? Math.round((soItens + frete) * 100) / 100 : 0;
       el.querySelector('#vTotal').textContent = brl(total);
+      el.querySelector('#vFrete').textContent = frete && soItens ? `itens ${brl(soItens)} + frete ${brl(frete)}` : '';
       body.querySelectorAll('tr').forEach((tr, i) => {
         tr.querySelector('.sub').textContent = brl((+itens[i].qtd || 0) * (+itens[i].valorUnit || 0));
         tr.querySelector('.pinfo').innerHTML = precoInfo(itens[i], i);
@@ -874,7 +920,8 @@
       const cond = condicaoPagamento();
       if (!cond) { toast('Informe a condição de pagamento (e o prazo, se for boleto ou cartão).', true); fp.focus(); return; }
       executar(el.querySelector('#btnEnviar'), () => S.criarSolicitacao({
-        filial: f.filial.value, centroCusto: f.centroCusto.value, categoria: f.categoria.value,
+        departamento: f.departamento.value, filial: f.filial.value, centroCusto: f.centroCusto.value, categoria: f.categoria.value,
+        prazoEntrega: f.prazoEntrega.value.trim(), valorFrete: Number(f.valorFrete.value) || 0,
         fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens,
         condicaoPagamento: cond, cidade: cidade || f.filial.value.replace(/ \(.*\)/, '')
       }, anexos.map(o => ({ fornecedor: o.fornecedor.trim(), valor: o.valor, file: o.file }))), j => {
@@ -902,14 +949,18 @@
       const ass = await S.assinaturas([r.solicitanteId, r.aprovadorId].filter(Boolean));
       const blob = await window.CVPdf.gerar(S.getRequest(id) || r, forn, ass, n => S.nomeNivel(n));
       if (o.baixar) window.CVPdf.baixar(blob, window.CVPdf.nomeArquivo(r));
-      if (o.salvar !== false) { try { await S.salvarPdf(id, blob); } catch (e) { toast('PDF gerado, mas não foi possível salvar no Drive: ' + e.message, true); } }
+      if (o.salvar !== false) {
+        const antes = !!r.emailEnviadoEm;
+        try { await S.salvarPdf(id, blob); const rr = S.getRequest(id); if (!antes && rr && rr.emailEnviadoEm) toast(`Pedido ${rr.numeroPdf} enviado por e-mail ao setor de Compras.`); }
+        catch (e) { toast('PDF gerado, mas não foi possível salvar no Drive: ' + e.message, true); }
+      }
     } catch (e) { toast('Não foi possível gerar o PDF: ' + e.message, true); }
     esconderCarregando();
   }
 
   // ========== LISTA ==========
   function vLista(el, u) {
-    const podeVerTodas = u.nivel >= 2;
+    const podeVerTodas = u.nivel >= 2;   // inclui Financeiro (5)
     el.innerHTML = `
       <div class="page-head"><div><h1>Solicitações</h1><p>${podeVerTodas ? 'Todas as solicitações da empresa.' : 'Suas solicitações de compra.'}</p></div>
         <a class="btn btn-accent" href="#/nova">${icon('plus', 18)} Nova</a></div>
@@ -918,6 +969,7 @@
           <input type="search" id="fBusca" placeholder="Buscar nº, item, fornecedor, solicitante…">
           <select id="fStatus"><option value="">Todos os status</option>${Object.keys(STATUS).map(s => `<option value="${s}">${STATUS[s]}</option>`).join('')}</select>
           <select id="fCC"><option value="">Todos os centros de custo</option>${opts(S.listas().centroCusto)}</select>
+          <select id="fDep"><option value="">Todos os departamentos</option>${opts(S.listas().departamento || [])}</select>
           ${podeVerTodas ? `<select id="fDono"><option value="">Todas</option><option value="minhas">Somente minhas</option></select>` : ''}
         </div>
         <div id="tab"></div>
@@ -926,12 +978,14 @@
       const q = el.querySelector('#fBusca').value.trim().toLowerCase();
       const st = el.querySelector('#fStatus').value;
       const cc = el.querySelector('#fCC').value;
+      const dep = el.querySelector('#fDep').value;
       const dono = el.querySelector('#fDono') ? el.querySelector('#fDono').value : 'minhas';
       let l = S.listRequests();
       if (!podeVerTodas || dono === 'minhas') l = l.filter(r => r.solicitanteId === u.id);
       if (st) l = l.filter(r => r.status === st);
       if (cc) l = l.filter(r => r.centroCusto === cc);
-      if (q) l = l.filter(r => [r.numero, r.fornecedor, r.fornecedorFinal, r.solicitanteNome, r.centroCusto, ...r.itens.map(i => i.descricao)].join(' ').toLowerCase().includes(q));
+      if (dep) l = l.filter(r => S.norm(r.departamento) === S.norm(dep));
+      if (q) l = l.filter(r => [r.numero, r.numeroPdf, r.departamento, r.fornecedor, r.fornecedorFinal, r.solicitanteNome, r.centroCusto, ...r.itens.map(i => i.descricao)].join(' ').toLowerCase().includes(q));
       el.querySelector('#tab').innerHTML = tabela(l) + `<p class="small muted" style="margin:12px 0 0">${l.length} registro(s) · ${brl(l.reduce((s, r) => s + Number(r.total), 0))}</p>`;
       bindLinhas(el);
     };
@@ -941,21 +995,43 @@
 
   // ========== APROVAÇÕES ==========
   function vAprovacoes(el, u) {
+    if (FIN(u)) return vAprovacoesConsulta(el, u);
     const todas = S.listRequests().filter(r => r.status === 'pendente');
     const paraMim = u.nivel >= 2 ? todas.filter(r => S.podeAprovar(u, r)) : [];
     const minhas = todas.filter(r => r.solicitanteId === u.id && !paraMim.includes(r));
     const acima = u.nivel >= 2 ? todas.filter(r => r.nivelNecessario > u.nivel && r.solicitanteId !== u.id) : [];
+    const separarDep = nv(u) >= 3 && !!u.departamento;
+    const doDep = separarDep ? paraMim.filter(r => doMeuDep(u, r)) : paraMim;
+    const outros = separarDep ? paraMim.filter(r => !doDep.includes(r)) : [];
     const acoes = r => `<div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" data-ap="${r.id}">Autorizar</button><button class="btn btn-danger btn-sm" data-rp="${r.id}">Reprovar</button></div>`;
     el.innerHTML = `
       <div class="page-head"><div><h1>Aguardando Autorização</h1><p>Solicitações enviadas que ainda não viraram pedido de compra. Após a autorização é gerado o PDF do Pedido de Compra numerado, com as assinaturas.</p></div></div>
-      ${u.nivel >= 2 ? `<div class="card"><div class="card-head"><h2>Para você autorizar (${paraMim.length})</h2><span class="small muted">alçada até ${brl(S.limiteDoNivel(u.nivel))}${u.nivel >= 3 ? ' · inclui as enviadas sem os orçamentos mínimos' : ''}</span></div>
-        ${tabela(paraMim, acoes)}</div>` : ''}
+      ${u.nivel >= 2 ? `<div class="card"><div class="card-head"><h2>${separarDep ? `Do meu departamento — ${esc(u.departamento)} (${doDep.length})` : `Para você autorizar (${paraMim.length})`}</h2><span class="small muted">alçada até ${brl(S.limiteDoNivel(u.nivel))}${u.nivel >= 3 ? ' · inclui as enviadas sem os orçamentos mínimos' : ''}</span></div>
+        <div class="filters filtro-dep"><select id="fDepAp"><option value="">Todos os departamentos</option>${opts(S.listas().departamento || [])}</select></div>
+        <div id="tabDep">${tabela(doDep, acoes)}</div></div>` : ''}
+      ${separarDep ? `<div class="card" id="cardOutros"><div class="card-head"><h2>Outros departamentos (${outros.length})</h2><span class="small muted">você também pode autorizar · sem notificação</span></div><div id="tabOutros">${tabela(outros, acoes)}</div></div>` : ''}
       <div class="card"><div class="card-head"><h2>Minhas solicitações aguardando (${minhas.length})</h2></div>${tabela(minhas)}</div>
       ${acima.length ? `<div class="card"><div class="card-head"><h2>Acima da sua alçada (${acima.length})</h2><span class="small muted">somente acompanhamento</span></div>${tabela(acima)}</div>` : ''}`;
-    bindLinhas(el);
-    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), j => { const r = j.state.requests.find(x => x.id === b.dataset.ap); return `Autorizado — Pedido de Compra Nº ${r ? r.numeroPdf : ''}`; },
+    const ligarAcoes = () => { bindLinhas(el); el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), j => { const r = j.state.requests.find(x => x.id === b.dataset.ap); return `Autorizado — Pedido de Compra Nº ${r ? r.numeroPdf : ''}`; },
       async () => { await gerarPdfPedido(b.dataset.ap, { baixar: true, msg: 'Gerando o Pedido de Compra com as assinaturas…' }); render(); }));
-    el.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => abrirDetalhe(b.dataset.rp, 'reprovar'));
+    el.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => abrirDetalhe(b.dataset.rp, 'reprovar')); };
+    ligarAcoes();
+    const fDep = el.querySelector('#fDepAp');
+    if (fDep) fDep.addEventListener('change', () => {
+      const d = fDep.value, filtra = l => (d ? l.filter(r => S.norm(r.departamento) === S.norm(d)) : l);
+      el.querySelector('#tabDep').innerHTML = tabela(filtra(d ? paraMim : doDep), acoes);
+      const co = el.querySelector('#cardOutros'); if (co) co.hidden = !!d;
+      ligarAcoes();
+    });
+  }
+  function vAprovacoesConsulta(el) {
+    const todas = S.listRequests().filter(r => r.status === 'pendente');
+    el.innerHTML = `
+      <div class="page-head"><div><h1>Aguardando Autorização</h1><p>Consulta das solicitações que ainda aguardam autorização.</p></div></div>
+      <div class="card"><div class="filters"><select id="fDepAp"><option value="">Todos os departamentos</option>${opts(S.listas().departamento || [])}</select></div><div id="tabDep"></div></div>`;
+    const pintar = () => { const d = el.querySelector('#fDepAp').value; const l = d ? todas.filter(r => S.norm(r.departamento) === S.norm(d)) : todas;
+      el.querySelector('#tabDep').innerHTML = tabela(l) + `<p class="small muted" style="margin:12px 0 0">${l.length} registro(s) · ${brl(l.reduce((s, r) => s + Number(r.total), 0))}</p>`; bindLinhas(el); };
+    el.querySelector('#fDepAp').addEventListener('change', pintar); pintar();
   }
 
   // ========== DETALHE (gaveta lateral) ==========
@@ -964,9 +1040,10 @@
     const r = S.getRequest(id);
     if (!r) return;
     const podeDecidir = S.podeAprovar(u, r);
-    const podeCancelar = r.status === 'pendente' && (r.solicitanteId === u.id || u.nivel >= 3);
-    const podeComprar = r.status === 'aprovado';
-    const podeAnexar = ['pendente', 'aprovado'].includes(r.status) && (r.solicitanteId === u.id || u.nivel >= 2);
+    const podeCancelar = !FIN(u) && r.status === 'pendente' && (r.solicitanteId === u.id || nv(u) >= 3);
+    const podeComprar = !FIN(u) && r.status === 'aprovado';
+    const podeAnexar = !FIN(u) && ['pendente', 'aprovado'].includes(r.status) && (r.solicitanteId === u.id || nv(u) >= 2);
+    const frete = Number(r.valorFrete) || 0;
     const orcs = r.orcamentos || [];
     const menorOrc = orcs.filter(o => Number(o.valor) > 0).sort((a, b) => a.valor - b.valor)[0];
     const reabrir = () => { render(); abrirDetalhe(id); };
@@ -980,22 +1057,26 @@
       <div class="dl">
         <div><span>Solicitante</span>${esc(r.solicitanteNome)} <span class="nivel-tag">${esc(S.nomeNivel(r.nivelSolicitante))}</span></div>
         <div><span>Criada em</span>${dataHora(r.criadoEm)}</div>
+        <div><span>Departamento</span>${esc(r.departamento || '—')}</div>
         <div><span>Filial</span>${esc(r.filial)}</div>
         <div><span>Centro de custo</span>${esc(r.centroCusto)}</div>
         <div><span>Categoria</span>${esc(r.categoria)}</div>
         <div><span>Fornecedor sugerido</span>${esc(r.fornecedor || '—')}</div>
         <div><span>Condição de pagamento</span>${esc(r.condicaoPagamento || '—')}</div>
+        <div><span>Prazo de entrega</span>${esc(r.prazoEntrega || '—')}</div>
+        <div><span>Frete</span>${frete ? brl(frete) : 'Sem frete'}</div>
         <div><span>Cidade</span>${esc(r.cidade || '—')}</div>
         ${r.urgencia ? `<div><span>Urgência</span><b class="urg-${esc(r.urgencia)}">${esc(r.urgencia)}</b></div>` : ''}
         ${r.dataNecessidade ? `<div><span>Necessário até</span>${data(r.dataNecessidade)}</div>` : ''}
         ${r.aprovadorNome ? `<div><span>${r.status === 'reprovado' ? 'Reprovado por' : 'Aprovado por'}</span>${esc(r.aprovadorNome)}${r.nivelAprovador ? ' (' + esc(S.nomeNivel(r.nivelAprovador)) + ')' : ''}</div><div><span>Decisão em</span>${dataHora(r.decididoEm)}</div>` : ''}
+        ${r.emailEnviadoEm ? `<div><span>Enviado ao Compras</span>${dataHora(r.emailEnviadoEm)}</div>` : ''}
         ${r.compradoEm ? `<div><span>Comprado de</span>${esc(r.fornecedorFinal || r.fornecedor || '—')}</div><div><span>Comprado em</span>${dataHora(r.compradoEm)}</div>` : ''}
       </div>
       ${r.justificativa ? `<h3>Motivo da compra</h3><p style="margin:6px 0 16px">${esc(r.justificativa)}</p>` : ''}
       <h3>Itens</h3>
       <div class="table-wrap"><table><thead><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Unit.</th><th class="r">Subtotal</th></tr></thead>
         <tbody>${r.itens.map(i => { const s = S.statsPreco(i.itemId, i.descricao); return `<tr><td>${esc(i.descricao)}${s && r.status !== 'comprado' ? `<div class="small muted">últ. pago ${brl(s.ultimo)} · méd. ${brl(s.media)}</div>` : ''}</td><td class="r num">${i.qtd} ${esc(i.unidade)}</td><td class="r num">${brl(i.valorUnit)}</td><td class="r num">${brl(i.qtd * i.valorUnit)}</td></tr>`; }).join('')}</tbody>
-        <tfoot><tr><td colspan="3"><b>Total</b></td><td class="r num"><b>${brl(r.total)}</b></td></tr></tfoot></table></div>
+        <tfoot>${frete ? `<tr><td colspan="3">Frete</td><td class="r num">${brl(frete)}</td></tr>` : ''}<tr><td colspan="3"><b>Total</b></td><td class="r num"><b>${brl(r.total)}</b></td></tr></tfoot></table></div>
 
       <div class="pdf-box">
         ${icon('file', 26)}
@@ -1011,7 +1092,7 @@
           <div class="orc-info"><a href="${esc(o.arquivoUrl)}" target="_blank" rel="noopener" ${String(o.arquivoUrl).startsWith('data:') ? `download="${esc(o.arquivoNome)}"` : ''}><b>${esc(o.fornecedor || 'Orçamento')}</b></a>
             <div class="small muted">${esc(o.arquivoNome)} · ${esc(o.enviadoPor)} · ${data(o.em)}</div></div>
           <div class="r num"><b>${Number(o.valor) ? brl(o.valor) : ''}</b>${menorOrc && o.id === menorOrc.id && orcs.length > 1 ? '<div class="small" style="color:var(--ok)">menor valor</div>' : ''}</div>
-          ${(o.enviadoPor === u.nome || u.nivel >= 2) && r.status !== 'comprado' ? `<button class="btn btn-ghost btn-sm" data-rmorc="${o.id}" title="Remover">${icon('trash', 16)}</button>` : ''}
+          ${!FIN(u) && (o.enviadoPor === u.nome || nv(u) >= 2) && r.status !== 'comprado' ? `<button class="btn btn-ghost btn-sm" data-rmorc="${o.id}" title="Remover">${icon('trash', 16)}</button>` : ''}
         </div>`).join('')}</div>` : '<p class="small muted" style="margin:0 0 8px">Nenhum orçamento anexado.</p>'}
       ${podeAnexar ? `<form id="fOrc" class="card orc-form">
           <div class="grid g3">
@@ -1038,7 +1119,7 @@
       <ul class="timeline">${r.historico.map(h => `<li><b>${esc(h.acao)}</b><div class="small muted">${dataHora(h.em)} · ${esc(h.usuario)}</div>${h.obs ? `<div class="small">“${esc(h.obs)}”</div>` : ''}</li>`).join('')}</ul>
     `, (bg) => {
       bg.querySelector('.drawer').setAttribute('aria-label', 'Solicitação ' + r.numero);
-      bg.querySelector('#btnPdf').onclick = () => gerarPdfPedido(r.id, { baixar: true, salvar: !r.pdfUrl && (r.solicitanteId === u.id || u.nivel >= 2) });
+      bg.querySelector('#btnPdf').onclick = () => gerarPdfPedido(r.id, { baixar: true, salvar: !FIN(u) && !r.pdfUrl && (r.solicitanteId === u.id || nv(u) >= 2) });
       bg.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
         const obs = bg.querySelector('#obs').value;
         const a = b.dataset.act;
@@ -1098,7 +1179,7 @@
           <td class="r num">${i.ultimoPreco !== '' ? brl(i.ultimoPreco) : '—'}<div class="small muted">${i.ultimaCompra ? data(i.ultimaCompra) : ''}</div></td>
           <td class="r num hide-sm">${s ? brl(s.media) : '—'}</td>
           <td class="hide-sm">${esc(i.fornecedorPreferido || '—')}</td>
-          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${i.id}">Editar</button>${u.nivel >= 2 ? ` <button class="btn btn-ghost btn-sm" data-tg="${i.id}">${ativo(i) ? 'Desativar' : 'Ativar'}</button>` : ''}</td>
+          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${i.id}">Editar</button>${nv(u) >= 2 ? ` <button class="btn btn-ghost btn-sm" data-tg="${i.id}">${ativo(i) ? 'Desativar' : 'Ativar'}</button>` : ''}</td>
         </tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">Nenhum item encontrado.</div>';
       box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => formItem(itens.find(i => i.id === b.dataset.ed)));
       box.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => executar(b, () => S.act('toggleItem', { id: b.dataset.tg }), 'Item atualizado.'));
@@ -1174,7 +1255,7 @@
           <td class="hide-sm">${esc(f.contato)}<div class="small muted">${[f.telefone, f.email].filter(Boolean).map(esc).join(' · ')}</div></td>
           <td class="hide-sm small">${esc(f.categorias)}</td>
           ${u.nivel >= 2 ? `<td class="r num">${gasto[S.norm(f.nome)] ? brl(gasto[S.norm(f.nome)]) : '—'}</td>` : ''}
-          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${f.id}">Editar</button>${u.nivel >= 2 ? ` <button class="btn btn-ghost btn-sm" data-tg="${f.id}">${ativo(f) ? 'Desativar' : 'Ativar'}</button>` : ''}</td>
+          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${f.id}">Editar</button>${nv(u) >= 2 ? ` <button class="btn btn-ghost btn-sm" data-tg="${f.id}">${ativo(f) ? 'Desativar' : 'Ativar'}</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nenhum fornecedor encontrado.</div>';
       box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => formFornecedor(lst.find(f => f.id === b.dataset.ed)));
       box.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => executar(b, () => S.act('toggleFornecedor', { id: b.dataset.tg }), 'Fornecedor atualizado.'));
@@ -1412,9 +1493,11 @@
         <div class="acesso-dados">
           <div><span>CPF</span>${esc(x.cpf || '—')}</div>
           <div><span>Solicitado em</span>${dataHora(x.criadoEm)}</div>
+          ${x.departamento ? `<div><span>Departamento informado</span>${esc(x.departamento)}</div>` : ''}
         </div>
-        <div class="grid g2 acesso-form">
-          <div><label>Perfil do usuário *</label><select name="nivel" required><option value="">Selecione o perfil…</option>${[1, 2, 3].map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+        <div class="grid g3 acesso-form">
+          <div><label>Perfil do usuário *</label><select name="nivel" required><option value="">Selecione o perfil…</option>${NIVEIS_PERFIL.map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+          <div><label>Departamento *</label><select name="departamento" required><option value="">Selecione…</option>${opts(L.departamento || [], x.departamento)}</select></div>
           <div><label>Filial</label><select name="filial"><option value="">—</option>${opts(L.filial)}</select></div>
         </div>
         <div class="acoes" style="margin-top:12px">
@@ -1433,7 +1516,9 @@
       c.querySelector('[data-aprovar]').onclick = e => {
         const nivel = c.querySelector('[name=nivel]').value;
         if (!nivel) { toast('Escolha o perfil do usuário antes de aprovar.', true); c.querySelector('[name=nivel]').focus(); return; }
-        executar(e.currentTarget, () => S.act('aprovarAcesso', { id, nivel, filial: c.querySelector('[name=filial]').value }), j => j.state.extra.msg || 'Acesso aprovado.');
+        const departamento = c.querySelector('[name=departamento]').value;
+        if (!departamento) { toast('Escolha o departamento do usuário antes de aprovar.', true); c.querySelector('[name=departamento]').focus(); return; }
+        executar(e.currentTarget, () => S.act('aprovarAcesso', { id, nivel, departamento, filial: c.querySelector('[name=filial]').value }), j => j.state.extra.msg || 'Acesso aprovado.');
       };
       c.querySelector('[data-recusar]').onclick = e => {
         const motivo = prompt('Motivo da recusa (opcional):', '');
@@ -1483,8 +1568,8 @@
       <div class="card">
         <div class="card-head"><h2>Usuários</h2>${S.acessosPendentes() ? `<a href="#/acessos" class="btn-mini laranja">${S.acessosPendentes()} aguardando aprovação</a>` : ''}<button class="btn btn-accent btn-sm" id="novoU">${icon('plus', 16)} Novo usuário</button></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Perfil</th><th class="hide-sm">Filial</th><th>Assinatura</th><th>Status</th><th></th></tr></thead>
-          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td class="hide-sm">${esc(x.filial)}</td>
+          <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Perfil</th><th>Departamento</th><th class="hide-sm">Filial</th><th>Assinatura</th><th>Status</th><th></th></tr></thead>
+          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td>${esc(x.departamento || '—')}</td><td class="hide-sm">${esc(x.filial)}</td>
             <td>${x.temAssinatura ? '<span class="status st-aprovado">Cadastrada</span>' : '<span class="status st-pendente">Pendente</span>'}<div><button class="btn-mini" data-lk="${x.id}" title="Gerar link para a pessoa assinar">${icon('link', 12)} ${x.temAssinatura ? 'Novo link' : 'Gerar link'}</button></div></td>
             <td>${x.status === 'recusado' ? '<span class="status st-reprovado">Recusado</span>' : x.ativo ? '<span class="status st-aprovado">Ativo</span>' : '<span class="status st-cancelado">Inativo</span>'}</td>
             <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${x.id}">Editar</button> ${x.id !== u.id ? `<button class="btn btn-ghost btn-sm" data-tg="${x.id}">${x.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}</td></tr>`).join('')}</tbody>
@@ -1495,7 +1580,8 @@
             <div><label>Nome *</label><input name="nome" required></div>
             <div><label>E-mail *</label><input name="email" type="email" required></div>
             <div><label>Senha <span class="muted" id="senhaHint"></span></label><input name="senha" type="text" autocomplete="off"></div>
-            <div><label>Perfil</label><select name="nivel">${[1, 2, 3].map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+            <div><label>Perfil</label><select name="nivel">${NIVEIS_PERFIL.map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+            <div><label>Departamento</label><select name="departamento"></select></div>
             <div><label>Filial</label><select name="filial"></select></div>
             <div style="display:flex;gap:8px;align-items:end"><button class="btn btn-primary">Salvar</button><button type="button" class="btn btn-ghost" id="cancU">Cancelar</button></div>
           </div>
@@ -1529,6 +1615,8 @@
       fU.nivel.value = x ? x.nivel : 1;
       const fl = S.listas().filial, atual = x ? x.filial : fl[0];
       fU.filial.innerHTML = opts(fl.includes(atual) || !atual ? fl : fl.concat([atual]), atual);
+      const dl = S.listas().departamento || [], dAt = x ? x.departamento || '' : '';
+      fU.departamento.innerHTML = '<option value="">—</option>' + opts(dl.includes(dAt) || !dAt ? dl : dl.concat([dAt]), dAt);
       el.querySelector('#senhaHint').textContent = x ? '(deixe em branco para manter)' : '*';
       fU.nome.focus();
     };
@@ -1539,7 +1627,7 @@
     el.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => executar(b, () => S.act('gerarLinkAssinatura', { id: b.dataset.lk }), null, j => { render(); mostrarLinkAssinatura(j.state.extra.nome, j.state.extra.token); }));
     fU.addEventListener('submit', e => {
       e.preventDefault();
-      executar(fU.querySelector('button'), () => S.act('saveUser', { user: { id: fU.id.value, nome: fU.nome.value.trim(), email: fU.email.value, senha: fU.senha.value, nivel: fU.nivel.value, filial: fU.filial.value } }), 'Usuário salvo.');
+      executar(fU.querySelector('button'), () => S.act('saveUser', { user: { id: fU.id.value, nome: fU.nome.value.trim(), email: fU.email.value, senha: fU.senha.value, nivel: fU.nivel.value, departamento: fU.departamento.value, filial: fU.filial.value } }), 'Usuário salvo.');
     });
     el.querySelector('#bExp').onclick = () => download('pedidos-compra-completo.json', S.exportJSON(), 'application/json');
     const br = el.querySelector('#bReset');

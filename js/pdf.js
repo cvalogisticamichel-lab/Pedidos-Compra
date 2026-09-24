@@ -84,7 +84,8 @@ window.CVPdf = (function () {
     y = tabelaInfo(y, [
       ['Data da solicitação', dataHoraBR(r.criadoEm), 'Cidade', t(r.cidade)],
       ['Filial', t(r.filial), 'Centro de custo', t(r.centroCusto)],
-      ['Categoria', t(r.categoria), 'Situação', statusTxt],
+      ['Departamento', t(r.departamento), 'Categoria', t(r.categoria)],
+      ['Prazo de entrega', t(r.prazoEntrega), 'Situação', statusTxt],
       ['Solicitante', t(r.solicitanteNome), 'Data da aprovação', ['aprovado', 'comprado'].includes(r.status) ? dataBR(r.decididoEm) : '—']
     ]);
 
@@ -117,7 +118,8 @@ window.CVPdf = (function () {
       columnStyles: { 0: { cellWidth: 9, halign: 'center' }, 2: { halign: 'right', cellWidth: 18 }, 3: { cellWidth: 14 }, 4: { halign: 'right', cellWidth: 28 }, 5: { halign: 'right', cellWidth: 30 } },
       head: [['#', 'Descrição', 'Qtd', 'Unid.', 'Valor unit.', 'Subtotal']],
       body: (r.itens || []).map((i, k) => [k + 1, i.descricao, String(i.qtd).replace('.', ','), i.unidade, brl(i.valorUnit), brl(i.qtd * i.valorUnit)]),
-      foot: [[{ content: 'VALOR TOTAL', colSpan: 5, styles: { halign: 'right' } }, { content: brl(r.total), styles: { halign: 'right' } }]]
+      foot: (Number(r.valorFrete) > 0 ? [[{ content: 'FRETE', colSpan: 5, styles: { halign: 'right', fontSize: 9 } }, { content: brl(r.valorFrete), styles: { halign: 'right', fontSize: 9 } }]] : [])
+        .concat([[{ content: 'VALOR TOTAL', colSpan: 5, styles: { halign: 'right' } }, { content: brl(r.total), styles: { halign: 'right' } }]])
     });
     y = doc.lastAutoTable.finalY;
 
@@ -156,6 +158,17 @@ window.CVPdf = (function () {
     if (['aprovado', 'comprado'].includes(r.status)) caixa(M + colW + 12, 'Aprovado por', r.aprovadorId, r.aprovadorNome, (nomeNivel(r.nivelAprovador) || '') + ' · Aprovado em ' + dataBR(r.decididoEm));
     else if (r.status === 'reprovado') caixa(M + colW + 12, 'Reprovado por', r.aprovadorId, r.aprovadorNome, 'Em ' + dataBR(r.decididoEm));
     else caixa(M + colW + 12, 'Autorização', null, 'Aguardando autorização', 'Alçada: ' + (nomeNivel(r.nivelNecessario) || ''));
+
+    // ---------- aviso do espelho (somente antes da autorização) ----------
+    if (!pedido) {
+      const aviso = '* ESTE DOCUMENTO NÃO POSSUI FINALIDADE FISCAL. ELE NÃO AUTORIZA A REALIZAÇÃO DE UMA COMPRA. SERVE APENAS PARA TRÂMITES INTERNOS DA EMPRESA.';
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(29, 42, 34);
+      const lin = doc.splitTextToSize(aviso, W - 2 * M - 8);
+      const ya = 268, h = 5 + lin.length * 4;
+      doc.setDrawColor(180, 106, 0); doc.setFillColor(255, 248, 235); doc.setLineWidth(0.4);
+      doc.roundedRect(M, ya, W - 2 * M, h, 1.5, 1.5, 'FD');
+      doc.text(lin, W / 2, ya + 5.2, { align: 'center' });
+    }
 
     // ---------- marca d'água e rodapé ----------
     const n = doc.getNumberOfPages();

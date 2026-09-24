@@ -11,25 +11,29 @@ var CVEngine = (function () {
 
   // Cada chave = nome da aba na planilha; valores = colunas (ordem da planilha)
   var TABELAS = {
-    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId', 'orcIncompleto', 'qtdOrcamentos'],
+    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId', 'orcIncompleto', 'qtdOrcamentos', 'valorFrete', 'prazoEntrega', 'departamento', 'emailEnviadoEm'],
     Itens_Solicitacao: ['solicitacaoId', 'numero', 'seq', 'itemId', 'descricao', 'qtd', 'unidade', 'valorUnit', 'subtotal'],
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
     Itens: ['id', 'codigo', 'descricao', 'unidade', 'categoria', 'fornecedorPreferido', 'ultimoPreco', 'ultimaCompra', 'ativo', 'criadoEm'],
     Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual', 'statusCred', 'cadastradoPor', 'credAnalisadoPor', 'credAnalisadoEm', 'credObs'],
-    Listas: ['filial', 'centroCusto', 'categoria', 'unidade'],
+    Listas: ['filial', 'centroCusto', 'categoria', 'unidade', 'departamento'],
     Historico_Precos: ['em', 'itemId', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero', 'solicitacaoId'],
-    Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm', 'cpf', 'status', 'aprovadoPor', 'aprovadoEm', 'obsAcesso', 'assinatura', 'tokenAssinatura'],
+    Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm', 'cpf', 'status', 'aprovadoPor', 'aprovadoEm', 'obsAcesso', 'assinatura', 'tokenAssinatura', 'departamento'],
     Config: ['chave', 'valor']
   };
   // Tipos para conversão ao ler/gravar na planilha
-  var NUMEROS = ['nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
-  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm', 'credAnalisadoEm'];
+  var NUMEROS = ['valorFrete', 'nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
+  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm', 'credAnalisadoEm', 'emailEnviadoEm'];
   var BOOLEANOS = ['ativo'];
-  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf', 'numeroPdf', 'tokenAssinatura'];
+  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf', 'numeroPdf', 'tokenAssinatura', 'departamento', 'prazoEntrega'];
 
   var PADRAO = { limites: { 1: 2000, 2: 10000, 3: 50000 } };
-  var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria' };
+  var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria', 5: 'Financeiro' };
+  var FINANCEIRO = 5;   // perfil somente consulta
+  function fin(u) { return !!u && Number(u.nivel) === FINANCEIRO; }
+  function nivelDe(u) { return fin(u) ? 0 : Number(u.nivel) || 0; }   // nível para permissões
+  var ACOES_CONSULTA = { state: 1, assinaturas: 1, changePassword: 1, salvarMinhaAssinatura: 1, gerarLinkAssinatura: 1 };
   // ===== ACESSOS =====
   var DOMINIO_AUTORIZADO = 'cheiroverdeambiental.com.br';
   var EMAILS_EXTERNOS_AUTORIZADOS = {       // diretores (e-mails fora do domínio)
@@ -45,9 +49,11 @@ var CVEngine = (function () {
     filial: ['Bernardino de Campos (Matriz)', 'Assis', 'São Manuel', 'Botucatu'],
     centroCusto: ['Operações - Coleta', 'Frota e Manutenção', 'Tratamento de Resíduos', 'Segurança do Trabalho', 'Administrativo', 'TI', 'Comercial'],
     categoria: ['EPI', 'Materiais de consumo', 'Embalagens e coletores', 'Peças e manutenção', 'Combustível', 'Equipamentos', 'Serviços', 'TI', 'Escritório'],
-    unidade: ['un', 'cx', 'pct', 'kg', 'L', 'm', 'serv', 'h']
+    unidade: ['un', 'cx', 'pct', 'kg', 'L', 'm', 'serv', 'h'],
+    departamento: ['Logística', 'Administrativo', 'Comercial', 'Operacional']
   };
-  var TIPOS_LISTA = { filial: 'Filial', centroCusto: 'Centro de custo', categoria: 'Categoria', unidade: 'Unidade' };
+  var TIPOS_LISTA = { filial: 'Filial', centroCusto: 'Centro de custo', categoria: 'Categoria', unidade: 'Unidade', departamento: 'Departamento' };
+  function linhaListaVazia() { var r = {}; Object.keys(TIPOS_LISTA).forEach(function (k) { r[k] = ''; }); return r; }
 
   // ---------- utilidades ----------
   function agora() { return new Date().toISOString(); }
@@ -78,8 +84,8 @@ var CVEngine = (function () {
   }
   function minOrcamentos(db) { var v = cfg(db, 'min_orcamentos', 3); return v === '' || v == null || isNaN(Number(v)) ? 3 : Number(v); }
   function nivelNecessario(lim, total) { for (var n = 1; n <= 3; n++) if (total <= Number(lim[n])) return n; return 4; }
-  function podeAprovar(u, r) { return !!u && r.status === 'pendente' && Number(r.nivelNecessario) <= Number(u.nivel) && Number(r.nivelNecessario) <= 3; }
-  function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel) || 0, filial: u.filial, ativo: u.ativo !== false, status: statusUsuario(u), cpf: u.cpf || '', criadoEm: u.criadoEm || '', aprovadoPor: u.aprovadoPor || '', aprovadoEm: u.aprovadoEm || '', obsAcesso: u.obsAcesso || '', temAssinatura: !!u.assinatura }; }
+  function podeAprovar(u, r) { return !!u && !fin(u) && r.status === 'pendente' && Number(r.nivelNecessario) <= nivelDe(u) && Number(r.nivelNecessario) <= 3; }
+  function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel) || 0, filial: u.filial, ativo: u.ativo !== false, status: statusUsuario(u), cpf: u.cpf || '', criadoEm: u.criadoEm || '', aprovadoPor: u.aprovadoPor || '', aprovadoEm: u.aprovadoEm || '', obsAcesso: u.obsAcesso || '', temAssinatura: !!u.assinatura, departamento: u.departamento || '' }; }
   function hist(db, r, usuario, acao, obs, em) {
     db.Historico.push({ solicitacaoId: r.id, numero: r.numero, em: em || agora(), usuario: usuario, acao: acao, obs: txt(obs) });
     sujar(db, 'Historico');
@@ -110,13 +116,13 @@ var CVEngine = (function () {
     valor = txt(valor); if (!valor) erro('Informe o valor.');
     db.Listas = db.Listas || [];
     if (!db.Listas.some(function (r) { return txt(r[tipo]); })) { // coluna vazia usa o padrão: grava o padrão antes
-      LISTAS_PADRAO[tipo].forEach(function (v, i) { if (!db.Listas[i]) db.Listas[i] = { filial: '', centroCusto: '', categoria: '', unidade: '' }; db.Listas[i][tipo] = v; });
+      LISTAS_PADRAO[tipo].forEach(function (v, i) { if (!db.Listas[i]) db.Listas[i] = linhaListaVazia(); db.Listas[i][tipo] = v; });
     }
     if (listas(db)[tipo].some(function (v) { return norm(v) === norm(valor); })) erro('"' + valor + '" já existe na lista de ' + TIPOS_LISTA[tipo] + '.');
     var livre = null;
     for (var i = 0; i < db.Listas.length; i++) if (!txt(db.Listas[i][tipo])) { livre = db.Listas[i]; break; }
     if (livre) livre[tipo] = valor;
-    else { var r = { filial: '', centroCusto: '', categoria: '', unidade: '' }; r[tipo] = valor; db.Listas.push(r); }
+    else { var r = linhaListaVazia(); r[tipo] = valor; db.Listas.push(r); }
     sujar(db, 'Listas');
   }
   function removeLista(db, tipo, valor) {
@@ -127,7 +133,7 @@ var CVEngine = (function () {
     // reescreve a coluna compactada (sem buracos)
     var n = Math.max(db.Listas.length, vals.length);
     for (var i = 0; i < n; i++) {
-      if (!db.Listas[i]) db.Listas[i] = { filial: '', centroCusto: '', categoria: '', unidade: '' };
+      if (!db.Listas[i]) db.Listas[i] = linhaListaVazia();
       db.Listas[i][tipo] = vals[i] || '';
     }
     db.Listas = db.Listas.filter(function (r) { return Object.keys(TIPOS_LISTA).some(function (k) { return txt(r[k]); }); });
@@ -193,7 +199,7 @@ var CVEngine = (function () {
     var histBy = agrupar(db.Historico, 'solicitacaoId');
     var orcBy = agrupar(db.Orcamentos, 'solicitacaoId');
     var reqs = db.Solicitacoes
-      .filter(function (r) { return Number(u.nivel) >= 2 || r.solicitanteId === u.id; })
+      .filter(function (r) { return nivelDe(u) >= 2 || fin(u) || r.solicitanteId === u.id; })
       .map(function (r) {
         var o = {}; for (var k in r) o[k] = r[k];
         o.itens = (itensBy[r.id] || []).slice().sort(function (a, b) { return a.seq - b.seq; });
@@ -208,11 +214,11 @@ var CVEngine = (function () {
       limites: limites(db),
       minOrcamentos: minOrcamentos(db),
       superAdmin: ehSuperAdmin(u),
-      acessosPendentes: Number(u.nivel) >= 3 ? db.Usuarios.filter(function (x) { return x.status === 'pendente'; }).length : 0,
-      fornecedoresPendentes: Number(u.nivel) >= 3 ? db.Fornecedores.filter(function (x) { return x.statusCred === 'pendente'; }).length : 0,
+      acessosPendentes: nivelDe(u) >= 3 ? db.Usuarios.filter(function (x) { return x.status === 'pendente'; }).length : 0,
+      fornecedoresPendentes: nivelDe(u) >= 3 ? db.Fornecedores.filter(function (x) { return x.statusCred === 'pendente'; }).length : 0,
       temAssinatura: !!u.assinatura,
       requests: reqs,
-      users: Number(u.nivel) >= 3 ? db.Usuarios.map(publico) : [],
+      users: nivelDe(u) >= 3 ? db.Usuarios.map(publico) : [],
       listas: listas(db),
       catalogo: db.Itens.slice().sort(function (a, b) { return String(a.descricao).localeCompare(String(b.descricao)); }),
       fornecedores: db.Fornecedores.slice().sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); }),
@@ -232,7 +238,9 @@ var CVEngine = (function () {
       return { itemId: txt(i.itemId), descricao: txt(i.descricao), unidade: txt(i.unidade) || 'un', qtd: Number(i.qtd) || 0, valorUnit: r2(i.valorUnit) };
     }).filter(function (i) { return i.descricao && i.qtd > 0; });
     if (!itens.length) erro('Inclua ao menos um item com descrição e quantidade.');
-    var total = r2(itens.reduce(function (s, i) { return s + i.qtd * i.valorUnit; }, 0));
+    var frete = r2(d.valorFrete); if (frete < 0) erro('Valor do frete inválido.');
+    if (!txt(d.prazoEntrega)) erro('Informe o prazo de entrega.');
+    var total = r2(itens.reduce(function (s, i) { return s + i.qtd * i.valorUnit; }, 0) + frete);
     if (total <= 0) erro('O valor total precisa ser maior que zero.');
     var ano = em.slice(0, 4);
     var r = {
@@ -242,7 +250,8 @@ var CVEngine = (function () {
       fornecedor: txt(d.fornecedor), urgencia: txt(d.urgencia), dataNecessidade: txt(d.dataNecessidade),
       justificativa: txt(d.justificativa), total: total, nivelNecessario: nivelNecessario(limites(db), total),
       status: 'pendente', aprovadorId: '', aprovadorNome: '', nivelAprovador: '', decididoEm: '', compradoEm: '', fornecedorFinal: '',
-      condicaoPagamento: txt(d.condicaoPagamento), numeroPdf: '', cidade: txt(d.cidade), pdfUrl: '', pdfId: '', orcIncompleto: !!d.orcIncompleto, qtdOrcamentos: Number(d.qtdOrcamentos) || 0
+      condicaoPagamento: txt(d.condicaoPagamento), numeroPdf: '', cidade: txt(d.cidade), pdfUrl: '', pdfId: '', orcIncompleto: !!d.orcIncompleto, qtdOrcamentos: Number(d.qtdOrcamentos) || 0,
+      valorFrete: frete, prazoEntrega: txt(d.prazoEntrega), departamento: txt(d.departamento) || txt(u.departamento), emailEnviadoEm: ''
     };
     if (r.orcIncompleto && r.nivelNecessario < 3) r.nivelNecessario = 3;   // sem os orçamentos mínimos: sempre Gerente
     db.Solicitacoes.push(r);
@@ -271,6 +280,12 @@ var CVEngine = (function () {
     if (aprovar) numerarPedido(db, r, em);
     sujar(db, 'Solicitacoes');
     hist(db, r, u.nome, aprovar ? 'Autorizado — Pedido de Compra Nº ' + r.numeroPdf : 'Reprovado', obs, em);
+  }
+  /** E-mails dos gerentes do departamento (se não houver, todos os gerentes) */
+  function gestoresDoDepartamento(db, dep) {
+    var ger = db.Usuarios.filter(function (x) { return Number(x.nivel) === 3 && x.ativo !== false && emailAutorizado(x.email); });
+    var doDep = ger.filter(function (x) { return dep && norm(x.departamento) === norm(dep); });
+    return (doDep.length ? doDep : ger).map(function (x) { return x.email; });
   }
   /** Número sequencial do Pedido de Compra (001/2026...) — só na aprovação */
   function numerarPedido(db, r, em) {
@@ -303,11 +318,12 @@ var CVEngine = (function () {
     hist(db, r, u.nome, 'Compra efetivada' + (forn ? ' — ' + forn : ''), obs, em);
   }
 
-  function exigir(u, nivel) { if (Number(u.nivel) < nivel) erro('Seu nível de acesso não permite esta ação.'); }
+  function exigir(u, nivel) { if (nivelDe(u) < nivel) erro('Seu perfil não permite esta ação.'); }
   function getReq(db, id) { var r = porId(db.Solicitacoes, id); if (!r) erro('Solicitação não encontrada.'); return r; }
 
   // ---------- ações públicas (chamadas pela interface) ----------
   function handle(db, action, p, u, ctx) {
+    if (fin(u) && !ACOES_CONSULTA[action]) erro('O perfil Financeiro é somente para consulta.');
     p = p || {};
     var extra = {};
     switch (action) {
@@ -322,6 +338,7 @@ var CVEngine = (function () {
         dados.orcIncompleto = orcs.length < min; dados.qtdOrcamentos = orcs.length;   // permitido, mas vai para o Gerente
         var r = criar(db, u, dados, ctx);
         extra.criado = { id: r.id, numero: r.numero, status: r.status, nivelNecessario: r.nivelNecessario };
+        if (r.status === 'pendente') extra.notificar = gestoresDoDepartamento(db, r.departamento);
         extra.orcamentosCriados = orcs.map(function (o) {
           var row = { id: ctx.uuid(), solicitacaoId: r.id, numero: r.numero, fornecedor: txt(o.fornecedor), valor: r2(o.valor), arquivoNome: txt(o.nome), arquivoUrl: txt(o.arquivoUrl), enviadoPor: u.nome, em: r.criadoEm };
           db.Orcamentos.push(row);
@@ -435,15 +452,15 @@ var CVEngine = (function () {
         var x = p.user || {}, email = norm(x.email);
         if (!txt(x.nome) || !email) erro('Nome e e-mail são obrigatórios.');
         if (db.Usuarios.some(function (y) { return norm(y.email) === email && y.id !== x.id; })) erro('Já existe um usuário com este e-mail.');
-        var nv = Number(x.nivel); if (!(nv >= 1 && nv <= 3)) erro('Nível inválido.');
+        var nv = Number(x.nivel); if (!(nv >= 1 && nv <= 3) && nv !== FINANCEIRO) erro('Perfil inválido.');
         if (x.id) {
           var ux = porId(db.Usuarios, x.id); if (!ux) erro('Usuário não encontrado.');
-          ux.nome = txt(x.nome); ux.email = email; ux.nivel = nv; ux.filial = txt(x.filial);
+          ux.nome = txt(x.nome); ux.email = email; ux.nivel = nv; ux.filial = txt(x.filial); ux.departamento = txt(x.departamento);
           if (txt(x.senha)) ux.senhaHash = ctx.hash(txt(x.senha));
         } else {
           if (!emailAutorizado(email)) erro('E-mail não autorizado. Use um e-mail @' + DOMINIO_AUTORIZADO + '.');
           if (txt(x.senha).length < 6) erro('Defina uma senha inicial (mín. 6 caracteres).');
-          db.Usuarios.push({ id: ctx.uuid(), nome: txt(x.nome), email: email, senhaHash: ctx.hash(txt(x.senha)), nivel: nv, filial: txt(x.filial), ativo: true, criadoEm: agora(), cpf: '', status: 'ativo', aprovadoPor: u.nome, aprovadoEm: agora(), obsAcesso: '' });
+          db.Usuarios.push({ id: ctx.uuid(), nome: txt(x.nome), email: email, senhaHash: ctx.hash(txt(x.senha)), nivel: nv, filial: txt(x.filial), ativo: true, criadoEm: agora(), cpf: '', status: 'ativo', aprovadoPor: u.nome, aprovadoEm: agora(), obsAcesso: '', departamento: txt(x.departamento) });
         }
         sujar(db, 'Usuarios');
         break;
@@ -452,8 +469,8 @@ var CVEngine = (function () {
       case 'aprovarAcesso': {
         exigir(u, 3);
         var ua = porId(db.Usuarios, p.id); if (!ua || ua.status !== 'pendente') erro('Cadastro não encontrado ou já analisado.');
-        var nva = Number(p.nivel); if (!(nva >= 1 && nva <= 3)) erro('Escolha o perfil: Comprador, Supervisor ou Gerente.');
-        ua.nivel = nva; ua.filial = txt(p.filial) || ua.filial; ua.ativo = true; ua.status = 'ativo';
+        var nva = Number(p.nivel); if (!(nva >= 1 && nva <= 3) && nva !== FINANCEIRO) erro('Escolha o perfil: Comprador, Supervisor, Gerente ou Financeiro.');
+        ua.nivel = nva; ua.filial = txt(p.filial) || ua.filial; ua.departamento = txt(p.departamento) || ua.departamento || ''; ua.ativo = true; ua.status = 'ativo';
         ua.aprovadoPor = u.nome; ua.aprovadoEm = agora(); ua.obsAcesso = '';
         sujar(db, 'Usuarios'); extra.msg = ua.nome + ' aprovado como ' + NOMES[nva] + '.';
         break;
@@ -543,7 +560,7 @@ var CVEngine = (function () {
     if (txt(p.senha).length < 6) erro('A senha precisa ter ao menos 6 caracteres.');
     if (txt(p.senha) !== txt(p.confirmacao)) erro('A senha e a confirmação não são iguais.');
     var novo = { id: ctx.uuid(), nome: nome, email: v.email, senhaHash: ctx.hash(txt(p.senha)), nivel: 0, filial: '', ativo: false, criadoEm: agora(),
-      cpf: formatarDoc(cpf), status: 'pendente', aprovadoPor: '', aprovadoEm: '', obsAcesso: '' };
+      cpf: formatarDoc(cpf), status: 'pendente', aprovadoPor: '', aprovadoEm: '', obsAcesso: '', departamento: txt(p.departamento) };
     db.Usuarios.push(novo); sujar(db, 'Usuarios');
     return { ok: true, nome: nome, email: v.email, gerentes: db.Usuarios.filter(function (x) { return Number(x.nivel) >= 3 && x.ativo !== false && emailAutorizado(x.email); }).map(function (x) { return x.email; }) };
   }
@@ -582,10 +599,12 @@ var CVEngine = (function () {
     setCfg(db, 'seq_pedido', 0); setCfg(db, 'seq_item', 0);
     var senha = ctx.hash('1234');
     db.Usuarios = [
-      { id: ctx.uuid(), nome: 'Ana Souza', email: 'comprador@cheiroverde.com.br', senhaHash: senha, nivel: 1, filial: filiais[0], ativo: true, criadoEm: em },
-      { id: ctx.uuid(), nome: 'Bruno Lima', email: 'comprador2@cheiroverde.com.br', senhaHash: senha, nivel: 1, filial: filiais[1], ativo: true, criadoEm: em },
-      { id: ctx.uuid(), nome: 'Carla Mendes', email: 'supervisor@cheiroverde.com.br', senhaHash: senha, nivel: 2, filial: filiais[0], ativo: true, criadoEm: em },
-      { id: ctx.uuid(), nome: 'Diego Rocha', email: 'gerente@cheiroverde.com.br', senhaHash: senha, nivel: 3, filial: filiais[0], ativo: true, criadoEm: em }
+      { id: ctx.uuid(), nome: 'Ana Souza', email: 'comprador@cheiroverde.com.br', senhaHash: senha, nivel: 1, filial: filiais[0], departamento: 'Logística', ativo: true, criadoEm: em },
+      { id: ctx.uuid(), nome: 'Bruno Lima', email: 'comprador2@cheiroverde.com.br', senhaHash: senha, nivel: 1, filial: filiais[1], departamento: 'Operacional', ativo: true, criadoEm: em },
+      { id: ctx.uuid(), nome: 'Carla Mendes', email: 'supervisor@cheiroverde.com.br', senhaHash: senha, nivel: 2, filial: filiais[0], departamento: 'Administrativo', ativo: true, criadoEm: em },
+      { id: ctx.uuid(), nome: 'Diego Rocha', email: 'gerente@cheiroverde.com.br', senhaHash: senha, nivel: 3, filial: filiais[0], departamento: 'Logística', ativo: true, criadoEm: em },
+      { id: ctx.uuid(), nome: 'Elisa Martins', email: 'gerente2@cheiroverde.com.br', senhaHash: senha, nivel: 3, filial: filiais[0], departamento: 'Operacional', ativo: true, criadoEm: em },
+      { id: ctx.uuid(), nome: 'Fábio Nunes', email: 'financeiro@cheiroverde.com.br', senhaHash: senha, nivel: 5, filial: filiais[0], departamento: 'Administrativo', ativo: true, criadoEm: em }
     ];
     db.Listas = linhasListasPadrao();
     FORNECEDORES.forEach(function (f) { db.Fornecedores.push({ id: ctx.uuid(), nome: f[0], cnpj: '', contato: '', telefone: '', email: '', cidade: f[1], categorias: f[2], ativo: true, criadoEm: em, statusCred: 'aprovado', cadastradoPor: 'Sistema', credAnalisadoPor: 'Sistema', credAnalisadoEm: em, credObs: '' }); });
@@ -614,7 +633,7 @@ var CVEngine = (function () {
       var em = new Date(ms).toISOString();
       var r = criar(db, criador, {
         filial: criador.filial, centroCusto: CC_POR_CAT[c[2]], categoria: c[2], fornecedor: c[3], condicaoPagamento: ['PIX', 'Boleto 28 dias', 'Boleto 30/60/90 dias'][Math.floor(rnd() * 3)], cidade: String(criador.filial).replace(/ \(.*\)/, '') + '/SP',
-        urgencia: '', dataNecessidade: '',
+        urgencia: '', dataNecessidade: '', prazoEntrega: ['5 dias úteis', '10 dias', 'Imediato', '15 dias'][Math.floor(rnd() * 4)], valorFrete: rnd() < 0.4 ? r2(entre(30, 180)) : 0,
         justificativa: 'Reposição para continuidade da operação.', itens: itens
       }, ctx, em);
       var idade = (now - ms) / DAY;
@@ -630,7 +649,7 @@ var CVEngine = (function () {
   }
 
   return {
-    TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA,
+    TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA, FINANCEIRO: FINANCEIRO,
     linhasListasPadrao: linhasListasPadrao, listas: listas, cnpjValido: cnpjValido, cpfValido: cpfValido, digitos: digitos, formatarDoc: formatarDoc, normalizarCnpj: normalizarCnpj,
     novoDb: novoDb, seed: seed, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, norm: norm, r2: r2

@@ -7,7 +7,7 @@
 window.CV_CONFIG = {
   empresa: 'Cheiro Verde Ambiental',
   sistema: 'Pedidos de Compra',
-  versao: '2.7.0',
+  versao: '2.8.0',
 
   // ========= INTEGRAÇÃO GOOGLE (Planilha + Drive) =========
   // Cole aqui a URL do App da Web do Google Apps Script (termina em /exec).
@@ -20,8 +20,10 @@ window.CV_CONFIG = {
   niveis: {
     1: { nome: 'Comprador',  limite: 2000 },
     2: { nome: 'Supervisor', limite: 10000 },
-    3: { nome: 'Gerente',    limite: 50000 }
+    3: { nome: 'Gerente',    limite: 50000 },
+    5: { nome: 'Financeiro', limite: 0 }   // somente consulta
   },
+  departamentos: ['Logística', 'Administrativo', 'Comercial', 'Operacional'],
   // Acima do limite do Gerente, o pedido fica aguardando esta instância:
   instanciaSuperior: 'Diretoria',
 
