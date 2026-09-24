@@ -7,7 +7,7 @@
 window.CV_CONFIG = {
   empresa: 'Cheiro Verde Ambiental',
   sistema: 'Pedidos de Compra',
-  versao: '2.1.0',
+  versao: '2.2.0',
 
   // ========= INTEGRAÇÃO GOOGLE (Planilha + Drive) =========
   // Cole aqui a URL do App da Web do Google Apps Script (termina em /exec).
