@@ -671,6 +671,9 @@
           <fieldset class="fs-limpo grid g2" id="boxVeic" hidden disabled style="margin-top:12px">
             <div><label>Tipo de manutenção *</label><select name="tipoManutencao" required><option value="">Selecione…</option>${opts(S.TIPOS_MANUTENCAO)}</select></div>
             <div id="boxOutro" hidden><label>Descreva o tipo de manutenção *</label><input name="tipoManutencaoOutro" placeholder="Ex.: elétrica, ar-condicionado, tacógrafo"></div>
+            <div class="larga-grid"><label>Vincular à solicitação de manutenção <span class="muted small">(opcional)</span></label>
+              <select name="manutencaoId" id="selManut"><option value="">Escolha a placa primeiro</option></select>
+              <div class="campo-hint muted" id="manutHint">Ao aprovar, o Pedido de Compra também é salvo na pasta desta manutenção.</div></div>
           </fieldset>
           <div class="field" style="margin:12px 0 0"><label>Motivo da compra *</label><textarea name="justificativa" rows="2" required placeholder="Descreva por que esta compra é necessária"></textarea></div>
           <div class="local-info" id="localInfo">${icon('home', 14)} Detectando a cidade da solicitação…</div>
@@ -985,7 +988,26 @@
     modSel.addEventListener('change', montarCC);
     tmSel.addEventListener('change', () => { boxOutro.hidden = tmSel.value !== 'Outros'; boxOutro.querySelector('input').required = tmSel.value === 'Outros'; });
     montarCC();
+    // --- vínculo com o painel de manutenção (Nova / Em andamento / Concluída) ---
+    const selManut = el.querySelector('#selManut');
+    let manutLista = [];
+    const carregarManut = async () => {
+      manutLista = [];
+      if (!S.ehVeiculo(modSel.value) || !ccSel.value) { selManut.innerHTML = '<option value="">Escolha a placa primeiro</option>'; return; }
+      const placa = ccSel.value;
+      selManut.innerHTML = '<option value="">Carregando solicitações da placa…</option>'; selManut.disabled = true;
+      try {
+        const l = await S.manutencoesPlaca(placa);
+        if (ccSel.value !== placa) return;
+        manutLista = l;
+        selManut.innerHTML = '<option value="">' + (l.length ? '— Não vincular —' : 'Nenhuma solicitação aberta ou concluída para esta placa') + '</option>' +
+          l.map(m => `<option value="${esc(m.id)}">${esc(S.resumoManutencao(m))}</option>`).join('');
+      } catch (e) { selManut.innerHTML = '<option value="">Não foi possível carregar: ' + esc(e.message) + '</option>'; }
+      selManut.disabled = false;
+    };
+    modSel.addEventListener('change', carregarManut);
     ccSel.addEventListener('change', () => {
+      carregarManut();
       if (ccSel.value !== '__novo__') { ccSel.dataset.ant = ccSel.value; return; }
       ccSel.value = ccSel.dataset.ant || '';
       novoValorLista('filial', v => { ccSel.dataset.ant = v; montarCC(); ccSel.value = v; });
@@ -1010,6 +1032,7 @@
       executar(el.querySelector('#btnEnviar'), () => S.criarSolicitacao({
         departamento: f.departamento.value, modalidade: f.modalidade.value, centroCusto: f.centroCusto.value, categoria: cat,
         tipoManutencao: veic ? f.tipoManutencao.value : '', tipoManutencaoOutro: veic ? f.tipoManutencaoOutro.value.trim() : '',
+        manutencaoId: veic ? selManut.value : '', manutencaoDesc: veic && selManut.value ? S.resumoManutencao(manutLista.find(m => m.id === selManut.value) || {}) : '',
         prazoEntrega: f.prazoEntrega.value.trim(), valorFrete: Number(f.valorFrete.value) || 0,
         fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens: linhas,
         condicaoPagamento: cond, cidade: cidade || (veic ? String(u.filial || '') : f.centroCusto.value).replace(/ \(.*\)/, '')
@@ -1152,6 +1175,7 @@
         <div><span>Modalidade</span>${esc(r.modalidade || '—')}</div>
         <div><span>${S.ehVeiculo(r.modalidade) ? 'Centro de custo (placa)' : 'Centro de custo'}</span>${esc(r.centroCusto)}${S.ehVeiculo(r.modalidade) ? (p => p && p.descricao ? `<div class="small muted">${esc(p.descricao)}${p.ativo ? '' : ' · placa removida da frota'}</div>` : '')(S.placas().find(x => x.placa === r.centroCusto)) : ''}</div>
         ${r.tipoManutencao ? `<div><span>Tipo de manutenção</span>${esc(r.tipoManutencao)}</div>` : ''}
+        ${r.manutencaoId ? `<div class="larga"><span>Manutenção vinculada</span>${esc(r.manutencaoDesc || r.manutencaoId)}${r.manutPdfEm ? `<div class="small muted">Pedido salvo na pasta da manutenção em ${dataHora(r.manutPdfEm)}${r.manutPdfUrl ? ` · <a href="${esc(r.manutPdfUrl)}" target="_blank" rel="noopener">abrir</a>` : ''}</div>` : ['aprovado', 'comprado'].includes(r.status) ? '' : '<div class="small muted">O Pedido será salvo na pasta da manutenção quando for aprovado.</div>'}</div>` : ''}
         <div><span>Categoria</span>${esc(r.categoria)}</div>
         <div><span>Fornecedor sugerido</span>${esc(r.fornecedor || '—')}</div>
         <div><span>Condição de pagamento</span>${esc(r.condicaoPagamento || '—')}</div>

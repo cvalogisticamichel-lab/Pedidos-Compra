@@ -7,8 +7,8 @@
 window.CV_CONFIG = {
   empresa: 'Cheiro Verde Ambiental',
   sistema: 'Pedidos de Compra',
-  versao: '2.9.3',
-  apiMinima: '2.9.3',   // versão mínima do Apps Script (Código.gs) que este site exige
+  versao: '2.10.0',
+  apiMinima: '2.10.0',   // versão mínima do Apps Script (Código.gs) que este site exige
 
   // ========= INTEGRAÇÃO GOOGLE (Planilha + Drive) =========
   // Cole aqui a URL do App da Web do Google Apps Script (termina em /exec).

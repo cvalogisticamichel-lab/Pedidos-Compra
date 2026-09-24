@@ -3,8 +3,8 @@
      na hora (cache-first). Uma versão nova tem outro ?v=, então nunca fica velho.
    - Página principal: busca na rede primeiro (pega atualizações), cache se offline.
    - Chamadas ao Google (API) nunca passam pelo cache. */
-const CACHE = 'cv-compras-v2.9.3';
-const V = '?v=2.9.3';
+const CACHE = 'cv-compras-v2.10.0';
+const V = '?v=2.10.0';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
   './style.css' + V, './marca.js' + V, './config.js' + V, './engine.js' + V,

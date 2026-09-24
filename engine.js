@@ -11,7 +11,7 @@ var CVEngine = (function () {
 
   // Cada chave = nome da aba na planilha; valores = colunas (ordem da planilha)
   var TABELAS = {
-    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId', 'orcIncompleto', 'qtdOrcamentos', 'valorFrete', 'prazoEntrega', 'departamento', 'emailEnviadoEm', 'modalidade', 'tipoManutencao'],
+    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId', 'orcIncompleto', 'qtdOrcamentos', 'valorFrete', 'prazoEntrega', 'departamento', 'emailEnviadoEm', 'modalidade', 'tipoManutencao', 'manutencaoId', 'manutencaoDesc', 'manutPdfEm', 'manutPdfUrl'],
     Itens_Solicitacao: ['solicitacaoId', 'numero', 'seq', 'itemId', 'descricao', 'qtd', 'unidade', 'valorUnit', 'subtotal', 'tipo', 'prazo'],
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
@@ -25,9 +25,9 @@ var CVEngine = (function () {
   };
   // Tipos para conversão ao ler/gravar na planilha
   var NUMEROS = ['valorFrete', 'nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
-  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm', 'credAnalisadoEm', 'emailEnviadoEm', 'atualizadoEm', 'removidaEm'];
+  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm', 'credAnalisadoEm', 'emailEnviadoEm', 'atualizadoEm', 'removidaEm', 'manutPdfEm'];
   var BOOLEANOS = ['ativo'];
-  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf', 'numeroPdf', 'tokenAssinatura', 'departamento', 'prazoEntrega', 'modalidade', 'tipoManutencao', 'tipo', 'prazo', 'placa', 'descricao'];
+  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf', 'numeroPdf', 'tokenAssinatura', 'departamento', 'prazoEntrega', 'modalidade', 'tipoManutencao', 'tipo', 'prazo', 'placa', 'descricao', 'manutencaoId', 'manutencaoDesc'];
 
   var PADRAO = { limites: { 1: 2000, 2: 10000, 3: 50000 } };
   var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria', 5: 'Financeiro' };
@@ -347,7 +347,8 @@ var CVEngine = (function () {
       status: 'pendente', aprovadorId: '', aprovadorNome: '', nivelAprovador: '', decididoEm: '', compradoEm: '', fornecedorFinal: '',
       condicaoPagamento: txt(d.condicaoPagamento), numeroPdf: '', cidade: txt(d.cidade), pdfUrl: '', pdfId: '', orcIncompleto: !!d.orcIncompleto, qtdOrcamentos: Number(d.qtdOrcamentos) || 0,
       valorFrete: frete, prazoEntrega: txt(d.prazoEntrega), departamento: txt(d.departamento) || txt(u.departamento), emailEnviadoEm: '',
-      modalidade: modalidade, tipoManutencao: tipoMan
+      modalidade: modalidade, tipoManutencao: tipoMan,
+      manutencaoId: veic ? txt(d.manutencaoId) : '', manutencaoDesc: veic && txt(d.manutencaoId) ? txt(d.manutencaoDesc) : '', manutPdfEm: '', manutPdfUrl: ''
     };
     if (r.orcIncompleto && r.nivelNecessario < 3) r.nivelNecessario = 3;   // sem os orçamentos mínimos: sempre Gerente
     db.Solicitacoes.push(r);
@@ -681,6 +682,20 @@ var CVEngine = (function () {
     return { ok: true, nome: nome, email: v.email, gerentes: db.Usuarios.filter(function (x) { return Number(x.nivel) >= 3 && x.ativo !== false && emailAutorizado(x.email); }).map(function (x) { return x.email; }) };
   }
 
+  // ---------- integração com o painel de manutenção da frota ----------
+  var STATUS_MANUTENCAO = { novo: 'Nova', em_andamento: 'Em andamento', concluido: 'Concluída' };   // cancelado não entra
+  function resumoManutencao(m) { return [m.data, STATUS_MANUTENCAO[m.status] || m.status, m.tipo, m.descricao].filter(Boolean).join(' · '); }
+  /** Demonstração (modo local): solicitações de manutenção de exemplo por placa */
+  function manutencoesDemo(placa) {
+    var p = txt(placa).toUpperCase(); if (!p) return [];
+    var h = 0; for (var i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) % 997;
+    return [
+      { id: 'demo-' + h + '-a', data: '22/09/2026', status: 'em_andamento', tipo: 'Mecânica', descricao: 'Barulho na suspensão dianteira', classificacao: 'corretiva' },
+      { id: 'demo-' + h + '-b', data: '15/09/2026', status: 'novo', tipo: 'Elétrica', descricao: 'Farol baixo queimado', classificacao: '' },
+      { id: 'demo-' + h + '-c', data: '02/09/2026', status: 'concluido', tipo: 'Pneus', descricao: 'Troca de 2 pneus traseiros', classificacao: 'pneus' }
+    ];
+  }
+
   // ---------- dados iniciais ----------
   var CATALOGO = [
     ['Luva nitrílica (caixa c/ 100)', 'cx', 'EPI', 'Proteção Total EPIs', 42, 60, 10, 60],
@@ -774,7 +789,7 @@ var CVEngine = (function () {
   return {
     TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA, FINANCEIRO: FINANCEIRO,
     linhasListasPadrao: linhasListasPadrao, listas: listas, cnpjValido: cnpjValido, cpfValido: cpfValido, digitos: digitos, formatarDoc: formatarDoc, normalizarCnpj: normalizarCnpj,
-    novoDb: novoDb, seed: seed, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
+    novoDb: novoDb, seed: seed, registrarHist: hist, manutencoesDemo: manutencoesDemo, STATUS_MANUTENCAO: STATUS_MANUTENCAO, resumoManutencao: resumoManutencao, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, podeVer: podeVer, limiteDoUsuario: limiteDoUsuario, limiteGerente: limiteGerente, maiorTetoGerente: maiorTetoGerente,
     migrar: migrar, sincronizarPlacas: sincronizarPlacas, ehVeiculo: ehVeiculo, TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_MANUTENCAO: TIPOS_MANUTENCAO, MODALIDADE_VEICULOS: MODALIDADE_VEICULOS,
     CAT_PRODUTOS: CAT_PRODUTOS, CAT_SERVICOS: CAT_SERVICOS, CAT_AMBOS: CAT_AMBOS, CAT_CONSUMIVEIS: CAT_CONSUMIVEIS, rotuloProdutos: rotuloProdutos, temProdutos: temProdutos, temServicos: temServicos, norm: norm, r2: r2

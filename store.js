@@ -268,6 +268,15 @@
     listUsers: () => st.users.slice(),
     listas: () => (st && st.listas && st.listas.modalidade && st.listas) || { filial: C.filiais, modalidade: C.centrosCusto.concat(['Manutenção de Veículos']), categoria: C.categorias, unidade: C.unidadesMedida, departamento: C.departamentos || ['Logística', 'Administrativo', 'Comercial', 'Operacional'] },
     digitos: E.digitos, cnpjValido: E.cnpjValido, cpfValido: E.cpfValido,
+    /** Solicitações de manutenção da placa (painel da frota) — cache de 2 min no navegador */
+    async manutencoesPlaca(placa) {
+      const k = String(placa || '').toUpperCase(); if (!k) return [];
+      const c = (this._manut = this._manut || {});
+      if (c[k] && Date.now() - c[k].t < 120000) return c[k].l;
+      const l = MODO === 'google' ? (await remoto('manutencoesPlaca', { token, placa: k })).dados || [] : E.manutencoesDemo(k);
+      c[k] = { t: Date.now(), l }; return l;
+    },
+    resumoManutencao: E.resumoManutencao,
     /** Consulta CNPJ: BrasilAPI direto do navegador; se falhar, via servidor Google (BrasilAPI/ReceitaWS). */
     async consultaCnpj(cnpj) {
       const d = E.digitos(cnpj);

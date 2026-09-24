@@ -86,7 +86,7 @@ window.CVPdf = (function () {
       ['Data da solicitação', dataHoraBR(r.criadoEm), 'Cidade', t(r.cidade)],
       ['Departamento', t(r.departamento), 'Modalidade', t(r.modalidade)],
       [veic ? 'Centro de custo (placa)' : 'Centro de custo', t(r.centroCusto), 'Categoria', t(r.categoria)]]
-      .concat(veic ? [['Tipo de manutenção', t(r.tipoManutencao), 'Prazo de entrega', t(r.prazoEntrega)], ['Situação', { content: statusTxt, colSpan: 3 }]] : [['Prazo de entrega', t(r.prazoEntrega), 'Situação', statusTxt]])
+      .concat(veic ? [['Tipo de manutenção', t(r.tipoManutencao), 'Prazo de entrega', t(r.prazoEntrega)], ['Situação', { content: statusTxt, colSpan: 3 }]].concat(r.manutencaoDesc ? [['Manutenção vinculada', { content: t(r.manutencaoDesc), colSpan: 3 }]] : []) : [['Prazo de entrega', t(r.prazoEntrega), 'Situação', statusTxt]])
       .concat([
       ['Solicitante', t(r.solicitanteNome), 'Data da aprovação', ['aprovado', 'comprado'].includes(r.status) ? dataBR(r.decididoEm) : '—']
     ]));
