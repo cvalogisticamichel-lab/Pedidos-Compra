@@ -260,3 +260,30 @@ tr.inativo td { opacity: .5; }
   .orc { grid-template-columns: auto 1fr auto; }
   .orc > .r { grid-column: 2; }
 }
+
+/* ---------- v2.1: autocompletar, avisos de cadastro, listas ---------- */
+.ac-box { position: fixed; z-index: 80; background: #fff; border: 1px solid var(--linha); border-radius: 10px; box-shadow: 0 10px 30px rgba(16, 40, 24, .16); max-height: 320px; overflow-y: auto; padding: 4px; }
+.ac-op { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.ac-op .t { font-weight: 600; font-size: .9rem; }
+.ac-op .s { font-size: .78rem; color: var(--tinta-3); margin-top: 1px; }
+.ac-op:hover, .ac-op.on { background: var(--verde-50); }
+.ac-op.novo { color: var(--laranja); border-top: 1px solid var(--linha); border-radius: 0 0 8px 8px; margin-top: 2px; }
+.ac-op.novo .t { display: flex; align-items: center; gap: 6px; }
+.ac-op.novo:hover, .ac-op.novo.on { background: var(--laranja-100); }
+.ac-vazio { padding: 8px 10px; font-size: .82rem; color: var(--tinta-3); }
+.campo-hint { font-size: .78rem; margin-top: 4px; min-height: 1em; }
+.campo-hint .ok { color: var(--ok); }
+.campo-hint .warn { color: var(--pend); font-weight: 600; }
+button.link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--verde-700); text-decoration: underline; cursor: pointer; }
+.doc-row { display: flex; gap: 8px; }
+.doc-row input { flex: 1; }
+.listas-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.lista-col h3 { margin-bottom: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: var(--verde-50); border: 1px solid var(--verde-100); border-radius: 99px; padding: 3px 4px 3px 10px; font-size: .82rem; }
+.chip button { border: 0; background: none; color: var(--tinta-3); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 4px; border-radius: 50%; }
+.chip button:hover { color: var(--erro); background: var(--erro-bg); }
+.addl { display: flex; gap: 6px; }
+.addl input { padding: 7px 10px; }
+@media (max-width: 1000px) { .listas-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .listas-grid { grid-template-columns: 1fr; } }
