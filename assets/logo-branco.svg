@@ -5,6 +5,6 @@
     <ellipse cx="228" cy="234" rx="140" ry="60" transform="rotate(-58 228 234)" fill="none" stroke="#fff" stroke-width="34"/>
     <ellipse cx="281" cy="278" rx="140" ry="58" transform="rotate(-58 281 278)" fill="none" stroke="#afcb09" stroke-width="36"/>
   </g>
-  <text x="86" y="38" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="27" font-weight="800" fill="#1b6b35" letter-spacing="-0.3">Cheiro Verde</text>
-  <text x="87.5" y="60" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="14.5" font-weight="700" fill="#7f9a00" letter-spacing="5.2">AMBIENTAL</text>
+  <text x="86" y="38" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="27" font-weight="800" fill="#ffffff" letter-spacing="-0.3">Cheiro Verde</text>
+  <text x="87.5" y="60" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="14.5" font-weight="700" fill="#c4dd2a" letter-spacing="5.2">AMBIENTAL</text>
 </svg>
