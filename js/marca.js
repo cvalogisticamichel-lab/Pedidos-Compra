@@ -11,7 +11,7 @@ window.CV_MARCA = (function () {
   var n = 0;
   /** Logo em SVG. branco=true para fundos escuros. */
   function logo(branco, extra) {
-    return '<svg class="cv-logo" viewBox="0 0 374 103" role="img" aria-label="Cheiro Verde Ambiental" ' + (extra || '') + '>' +
+    return '<svg xmlns="http://www.w3.org/2000/svg" class="cv-logo" viewBox="0 0 374 103" role="img" aria-label="Cheiro Verde Ambiental" ' + (extra || '') + '>' +
       '<path fill="' + (branco ? '#ffffff' : '#009334') + '" d="' + E + '"/><path fill="#5cc300" d="' + C + '"/></svg>';
   }
   /** Logo animada: avião verde contornando os anéis (loop infinito). */

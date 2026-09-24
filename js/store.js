@@ -28,7 +28,7 @@
       hash: s => { let h = 0x811c9dc5; const t = 'cv|' + s; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return 'l' + h.toString(16); }
     },
     load() {
-      if (this.db) return this.db;
+      this.db = null; // relê sempre (outras abas podem ter alterado)
       try { this.db = JSON.parse(ls.get(K_DB)); } catch (e) { this.db = null; }
       if (!this.db || !this.db.Usuarios) { this.db = E.seed(this.ctx, { demo: true, filiais: C.filiais }); this.save(); }
       if (!this.db.Listas) { this.db.Listas = E.linhasListasPadrao(); this.save(); } // dados salvos na versão anterior
@@ -47,6 +47,11 @@
       }
       if (action === 'logout') return { ok: true };
       if (action === 'verificarEmail') return { dados: E.verificarEmail(db, p.email) };
+      if (action === 'assinaturaInfo') return { dados: E.assinaturaInfo(db, p.tk) };
+      if (action === 'salvarAssinatura') {
+        try { const r = E.salvarAssinaturaToken(db, p.tk, p.png); this.save(); return { dados: r }; }
+        catch (e) { this.db = null; throw e; }
+      }
       if (action === 'solicitarAcesso') {
         try { const r = E.solicitarAcesso(db, p, this.ctx); this.save(); return { dados: { nome: r.nome, email: r.email } }; }
         catch (e) { this.db = null; throw e; }
@@ -54,6 +59,7 @@
       const u = db.Usuarios.find(x => x.id === p.token && x.ativo !== false);
       if (!u) { const e = new Error('Sessão expirada. Entre novamente.'); e.sessao = false; throw e; }
       let a = action;
+      if (a === 'salvarPdf') a = 'state'; // demonstração: o PDF é baixado, não fica guardado
       if (a === 'createRequest' && p.orcamentos) { // demonstração: guarda só arquivos pequenos
         p = Object.assign({}, p, { orcamentos: p.orcamentos.map(o => ({ fornecedor: o.fornecedor, valor: o.valor, nome: o.nome, arquivoUrl: o.base64 && o.base64.length < 400000 ? 'data:' + (o.mime || 'application/octet-stream') + ';base64,' + o.base64 : '' })) });
       }
@@ -140,6 +146,42 @@
     },
     user: () => (st ? st.user : null),
     superAdmin: () => !!(st && st.superAdmin),
+    fornecedoresPendentes: () => (st ? Number(st.fornecedoresPendentes) || 0 : 0),
+    temAssinatura: () => !!(st && st.temAssinatura),
+    async assinaturaInfo(token) { const j = await call('assinaturaInfo', { tk: token }); return j.dados; },
+    async salvarAssinatura(token, png) { const j = await call('salvarAssinatura', { tk: token, png }); return j.dados; },
+    async assinaturas(ids) { const j = await call('assinaturas', { ids }); return (j.state && j.state.extra && j.state.extra.assinaturas) || {}; },
+    /** Cidade de quem está solicitando (geolocalização do navegador) */
+    cidadeAtual() {
+      if (this._cidade) return this._cidade;
+      this._cidade = new Promise((ok, falha) => {
+        if (!navigator.geolocation) return falha(new Error('Este navegador não informa a localização.'));
+        navigator.geolocation.getCurrentPosition(async pos => {
+          const { latitude: la, longitude: lo } = pos.coords;
+          try {
+            const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${la}&longitude=${lo}&localityLanguage=pt`);
+            const j = await r.json();
+            const c = j.city || j.locality, uf = String(j.principalSubdivisionCode || '').replace(/^BR-/, '');
+            if (c) return ok(uf ? c + '/' + uf : c);
+          } catch (e) { /* tenta a próxima */ }
+          try {
+            const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${la}&lon=${lo}&accept-language=pt-BR`);
+            const a = (await r.json()).address || {};
+            const c = a.city || a.town || a.village || a.municipality, uf = String(a['ISO3166-2-lvl4'] || '').replace(/^BR-/, '');
+            if (c) return ok(uf ? c + '/' + uf : c);
+          } catch (e) { /* sem internet */ }
+          falha(new Error('Não foi possível identificar a cidade.'));
+        }, err => falha(new Error(err.code === 1 ? 'Localização não autorizada no navegador.' : 'Não foi possível obter a localização.')),
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 30 * 60 * 1000 });
+      });
+      this._cidade.catch(() => { this._cidade = null; });
+      return this._cidade;
+    },
+    async salvarPdf(id, blob) {
+      if (MODO !== 'google') return null;
+      const base64 = await lerArquivo(blob);
+      return call('salvarPdf', { id, base64 });
+    },
     acessosPendentes: () => (st ? Number(st.acessosPendentes) || 0 : 0),
     emailAutorizado: E.emailAutorizado,
     dominio: E.DOMINIO_AUTORIZADO,

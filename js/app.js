@@ -70,6 +70,10 @@
     trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
     sync: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
     clip: '<path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
+    truck: '<path d="M1 4h14v11H1zM15 8h4l3 3v4h-7"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+    shield: '<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/>',
+    pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     user: '<circle cx="9" cy="8" r="4"/><path d="M2 21v-1a7 7 0 0 1 14 0v1"/><path d="M19 8v6M16 11h6"/>',
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
     file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>'
@@ -82,15 +86,19 @@
     { id: 'nova', nome: 'Nova solicitação', curto: 'Nova', icon: 'plus', nivel: 1 },
     { id: 'solicitacoes', nome: 'Solicitações', curto: 'Pedidos', icon: 'list', nivel: 1 },
     { id: 'aprovacoes', nome: 'Aprovações', icon: 'check', nivel: 2 },
-    { id: 'cadastros', nome: 'Itens e fornecedores', curto: 'Cadastros', icon: 'box', nivel: 1 },
+    { id: 'itens', nome: 'Itens', icon: 'box', nivel: 1, grupo: 'Cadastros' },
+    { id: 'fornecedores', nome: 'Fornecedores', icon: 'truck', nivel: 1 },
+    { id: 'precos', nome: 'Histórico de preços', curto: 'Preços', icon: 'chart', nivel: 1 },
+    { id: 'credenciamento', nome: 'Credenciamento', curto: 'Credenc.', icon: 'shield', nivel: 3, grupo: 'Gestão' },
     { id: 'acessos', nome: 'Acessos', icon: 'user', nivel: 3 },
     { id: 'config', nome: 'Configurações', curto: 'Config.', icon: 'cog', nivel: 3 }
   ];
   function rotaAtual() {
     const h = (location.hash || '#/inicio').replace(/^#\//, '').split('/');
-    return { id: h[0] || 'inicio', param: h[1] };
+    const id = h[0] === 'cadastros' ? (h[1] || 'itens') : (h[0] || 'inicio'); // links antigos
+    return { id, param: h[1] };
   }
-  window.addEventListener('hashchange', () => { if (S.user()) render(); });
+  window.addEventListener('hashchange', () => render());
 
   function pendentesParaMim(u) { return S.listRequests().filter(r => S.podeAprovar(u, r)); }
 
@@ -130,9 +138,9 @@
           <button class="btn btn-primary" style="width:100%" type="submit" id="btnEntrar">Entrar</button>
           ${demo ? `<div class="demo-box">
             <b>Modo demonstração</b> — dados salvos só neste navegador. Senha <code>1234</code>:
-            <button type="button" data-demo="comprador@cheiroverde.com.br">Comprador — Nível 01</button>
-            <button type="button" data-demo="supervisor@cheiroverde.com.br">Supervisor — Nível 02</button>
-            <button type="button" data-demo="gerente@cheiroverde.com.br">Gerente — Nível 03</button>
+            <button type="button" data-demo="comprador@cheiroverde.com.br">Comprador</button>
+            <button type="button" data-demo="supervisor@cheiroverde.com.br">Supervisor</button>
+            <button type="button" data-demo="gerente@cheiroverde.com.br">Gerente</button>
           </div>` : `<p class="small muted" style="margin-top:16px">Conectado à base Google da empresa.</p>`}
         </form>
       </section>
@@ -241,6 +249,8 @@
 
   // ========== SHELL ==========
   function render() {
+    const rt = rotaAtual();
+    if (rt.id === 'assinar') return renderAssinar(rt.param);
     const u = S.user();
     if (!u) return renderLogin();
     document.querySelectorAll('.modal-bg').forEach(m => m.remove());
@@ -250,13 +260,15 @@
     const r = disp.find(x => x.id === rota.id) || disp[0];
     const nPend = pendentesParaMim(u).length;
     const nAcessos = u.nivel >= 3 ? S.acessosPendentes() : 0;
+    const nForn = u.nivel >= 3 ? S.fornecedoresPendentes() : 0;
+    const nNotif = nAcessos + nForn;
 
     root.innerHTML = `
     <div class="app">
       <aside class="sidebar">
         <div class="brand">${M.logo(true)}</div>
         <nav class="nav">
-          ${disp.map(x => `<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}${x.id === 'acessos' && nAcessos ? `<span class="badge">${nAcessos}</span>` : ''}</a>`).join('')}
+          ${disp.map(x => `${x.grupo ? `<div class="nav-grupo">${esc(x.grupo)}</div>` : ''}<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}${x.id === 'acessos' && nAcessos ? `<span class="badge">${nAcessos}</span>` : ''}${x.id === 'credenciamento' && nForn ? `<span class="badge">${nForn}</span>` : ''}</a>`).join('')}
         </nav>
         <div class="foot">${esc(C.sistema)} v${esc(C.versao)}<br>${S.modo === 'google' ? '● Conectado ao Google' : '○ Modo demonstração'}</div>
       </aside>
@@ -265,9 +277,9 @@
           <div class="mobile-brand">${M.logo(false)}</div>
           <h2 class="page-title-desk">${esc(r.nome)}</h2>
           <div class="user-chip">
-            ${u.nivel >= 3 ? `<a class="btn btn-ghost btn-sm sino${nAcessos ? ' tem' : ''}" href="#/acessos" title="${nAcessos ? nAcessos + ' cadastro(s) aguardando aprovação' : 'Sem novos cadastros'}">${icon('bell', 18)}${nAcessos ? `<span class="sino-n">${nAcessos}</span>` : ''}</a>` : ''}
+            ${u.nivel >= 3 ? `<a class="btn btn-ghost btn-sm sino${nNotif ? ' tem' : ''}" href="#/${nAcessos || !nForn ? 'acessos' : 'credenciamento'}" title="${[nAcessos ? nAcessos + ' usuário(s) aguardando aprovação' : '', nForn ? nForn + ' fornecedor(es) aguardando credenciamento' : ''].filter(Boolean).join(' · ') || 'Sem notificações'}">${icon('bell', 18)}${nNotif ? `<span class="sino-n">${nNotif}</span>` : ''}</a>` : ''}
             <button class="btn btn-ghost btn-sm" id="btnSync" title="Atualizar dados">${icon('sync', 18)}</button>
-            <div class="who"><b>${esc(u.nome)}</b><span class="nivel-tag">Nível 0${u.nivel} · ${esc(S.nomeNivel(u.nivel))}</span></div>
+            <div class="who"><b>${esc(u.nome)}</b><span class="nivel-tag">${esc(S.nomeNivel(u.nivel))}</span></div>
             <button class="avatar" id="btnPerfil" title="Minha conta">${iniciais(u.nome)}</button>
             <button class="btn btn-ghost btn-sm" id="btnSair" title="Sair">${icon('out', 18)}</button>
           </div>
@@ -280,7 +292,7 @@
     document.getElementById('btnPerfil').onclick = abrirPerfil;
 
     const view = document.getElementById('view');
-    ({ inicio: vInicio, nova: vNova, solicitacoes: vLista, aprovacoes: vAprovacoes, cadastros: vCadastros, acessos: vAcessos, config: vConfig }[r.id])(view, u, rota.param);
+    ({ inicio: vInicio, nova: vNova, solicitacoes: vLista, aprovacoes: vAprovacoes, cadastros: vCadastros, acessos: vAcessos, config: vConfig, itens: (e, x) => vCadastros(e, x, 'itens'), fornecedores: (e, x) => vCadastros(e, x, 'fornecedores'), precos: (e, x) => vCadastros(e, x, 'precos'), credenciamento: vCredenciamento }[r.id])(view, u, rota.param);
   }
 
   // Atualiza sozinho ao voltar para a aba (modo Google)
@@ -311,19 +323,134 @@
     const u = S.user();
     abrirGaveta(`
       <div class="card-head" style="margin:0"><div><div class="small muted">Minha conta</div><h1>${esc(u.nome)}</h1></div>${btnFechar}</div>
-      <p class="muted">${esc(u.email)} · Nível 0${u.nivel} — ${esc(S.nomeNivel(u.nivel))} · alçada ${brl(S.limiteDoNivel(u.nivel))}</p>
+      <p class="muted">${esc(u.email)} · ${esc(S.nomeNivel(u.nivel))} · alçada ${brl(S.limiteDoNivel(u.nivel))}</p>
       <form id="fSenha" class="card" style="margin-top:16px">
         <h2 style="margin-bottom:12px">Alterar senha</h2>
         <div class="field"><label>Senha atual</label><input type="password" name="atual" required autocomplete="current-password"></div>
         <div class="field"><label>Nova senha (mín. 6 caracteres)</label><input type="password" name="nova" minlength="6" required autocomplete="new-password"></div>
         <button class="btn btn-primary">Salvar nova senha</button>
-      </form>`, (bg, fechar) => {
+      </form>
+      <div class="card">
+        <div class="card-head"><h2>Minha assinatura</h2>${S.temAssinatura() ? '<span class="status st-aprovado">Cadastrada</span>' : '<span class="status st-pendente">Não cadastrada</span>'}</div>
+        <p class="small muted" style="margin-top:-6px">Usada no PDF dos pedidos de compra (solicitação e aprovação). Assine com o mouse ou com o dedo.</p>
+        <div id="padPerfil"></div>
+        <div class="acoes"><button class="btn btn-primary" id="salvarAss">${icon('pen', 16)} ${S.temAssinatura() ? 'Substituir assinatura' : 'Salvar assinatura'}</button>
+        <button class="btn btn-ghost" id="linkCel">${icon('link', 16)} Assinar pelo celular</button></div>
+      </div>`, (bg, fechar) => {
+      const pad = padAssinatura(bg.querySelector('#padPerfil'));
+      bg.querySelector('#salvarAss').onclick = e => {
+        if (pad.vazio()) { toast('Faça sua assinatura no quadro antes de salvar.', true); return; }
+        executar(e.currentTarget, () => S.act('salvarMinhaAssinatura', { png: pad.exportar() }), 'Assinatura salva.', () => fechar());
+      };
+      bg.querySelector('#linkCel').onclick = e => executar(e.currentTarget, () => S.act('gerarLinkAssinatura', {}), null, j => { fechar(); mostrarLinkAssinatura(j.state.extra.nome, j.state.extra.token); });
       const f = bg.querySelector('#fSenha');
       f.addEventListener('submit', e => {
         e.preventDefault();
         executar(f.querySelector('button'), () => S.act('changePassword', { atual: f.atual.value, nova: f.nova.value }), 'Senha alterada.', () => fechar());
       });
     });
+  }
+
+  // ========== ASSINATURA (quadro para assinar com mouse/dedo) ==========
+  function padAssinatura(box) {
+    box.innerHTML = `<div class="pad"><canvas></canvas><div class="pad-linha"></div><span class="pad-dica">Assine aqui</span>
+      <button type="button" class="btn btn-ghost btn-sm pad-limpar">Limpar</button></div>`;
+    const cv = box.querySelector('canvas'), ctx = cv.getContext('2d'), dica = box.querySelector('.pad-dica');
+    let desenhou = false, ativo = false, pts = [];
+    const ajustar = () => {
+      const r = cv.getBoundingClientRect(), dpr = Math.max(window.devicePixelRatio || 1, 2);
+      cv.width = r.width * dpr; cv.height = r.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#14285a';
+      desenhou = false; dica.hidden = false;
+    };
+    const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pressure || 0.5 }; };
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); ativo = true; pts = [pos(e)]; dica.hidden = true; });
+    cv.addEventListener('pointermove', e => {
+      if (!ativo) return; e.preventDefault();
+      const p = pos(e); pts.push(p);
+      if (pts.length < 3) return;
+      const [a, b, c] = pts.slice(-3);
+      const m1 = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, m2 = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+      const vel = Math.hypot(c.x - b.x, c.y - b.y);
+      ctx.lineWidth = Math.max(1.4, Math.min(3.2, 3.4 - vel * 0.08));
+      ctx.beginPath(); ctx.moveTo(m1.x, m1.y); ctx.quadraticCurveTo(b.x, b.y, m2.x, m2.y); ctx.stroke();
+      desenhou = true;
+    });
+    const fim = () => { if (ativo && pts.length === 1) { const p = pts[0]; ctx.beginPath(); ctx.arc(p.x, p.y, 1.3, 0, 7); ctx.fillStyle = '#14285a'; ctx.fill(); desenhou = true; } ativo = false; };
+    cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim); cv.addEventListener('pointerleave', fim);
+    box.querySelector('.pad-limpar').onclick = ajustar;
+    requestAnimationFrame(ajustar);
+    return {
+      vazio: () => !desenhou,
+      /** PNG recortado e reduzido (cabe numa célula da planilha) */
+      exportar() {
+        const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+        let x0 = cv.width, y0 = cv.height, x1 = 0, y1 = 0;
+        for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) if (d[(y * cv.width + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        const pad = 12; x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(cv.width, x1 + pad); y1 = Math.min(cv.height, y1 + pad);
+        let w = x1 - x0, h = y1 - y0, esc = Math.min(1, 520 / w, 180 / h), url = '';
+        for (let k = 0; k < 5; k++) {
+          const o = document.createElement('canvas'); o.width = Math.max(1, Math.round(w * esc)); o.height = Math.max(1, Math.round(h * esc));
+          o.getContext('2d').drawImage(cv, x0, y0, w, h, 0, 0, o.width, o.height);
+          url = o.toDataURL('image/png');
+          if (url.length < 40000) break;
+          esc *= 0.75;
+        }
+        return url;
+      }
+    };
+  }
+
+  const linkAssinatura = token => location.href.split('#')[0] + '#/assinar/' + token;
+  function mostrarLinkAssinatura(nome, token) {
+    const url = linkAssinatura(token);
+    const msg = `Olá, ${nome.split(' ')[0]}! Cadastre sua assinatura no sistema de Pedidos de Compra da Cheiro Verde Ambiental: ${url}`;
+    abrirGaveta(`
+      <div class="card-head" style="margin:0"><div><div class="small muted">Link de assinatura</div><h1>${esc(nome)}</h1></div>${btnFechar}</div>
+      <p class="muted">Envie este link para a pessoa assinar com o mouse ou com o dedo (no celular). O link vale para uma única assinatura.</p>
+      <div class="link-box"><input readonly value="${esc(url)}" id="lkUrl"><button class="btn btn-primary btn-sm" id="lkCopiar">Copiar</button></div>
+      <div class="acoes">
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">Enviar pelo WhatsApp</a>
+        <a class="btn btn-ghost" href="mailto:?subject=${encodeURIComponent('Cadastro de assinatura — Pedidos de Compra')}&body=${encodeURIComponent(msg)}">Enviar por e-mail</a>
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="${esc(url)}">Abrir link</a>
+      </div>`, bg => {
+      bg.querySelector('#lkCopiar').onclick = async () => {
+        const inp = bg.querySelector('#lkUrl'); inp.select();
+        try { await navigator.clipboard.writeText(url); } catch (e) { document.execCommand('copy'); }
+        toast('Link copiado.');
+      };
+    });
+  }
+
+  /** Página pública aberta pelo link (não precisa de login) */
+  async function renderAssinar(token) {
+    root.innerHTML = `<div class="assinar-wrap"><div class="assinar-card card">
+      <div class="assinar-logo">${M.logo(false)}</div>
+      <div id="assBox"><div class="empty"><span class="spin dark"></span> Verificando link…</div></div>
+    </div></div>`;
+    const box = document.getElementById('assBox');
+    try {
+      const info = await S.assinaturaInfo(token);
+      box.innerHTML = `<h1>Cadastro de assinatura</h1>
+        <p class="muted">Olá, <b>${esc(info.nome)}</b>. Assine no quadro abaixo como você assina documentos. Ela será usada nos PDFs dos pedidos de compra.</p>
+        <div id="padPub"></div>
+        <label class="check"><input type="checkbox" id="assOk"> Confirmo que esta é a minha assinatura.</label>
+        <button class="btn btn-primary" style="width:100%" id="assSalvar">${icon('pen', 16)} Salvar assinatura</button>`;
+      const pad = padAssinatura(box.querySelector('#padPub'));
+      box.querySelector('#assSalvar').onclick = async e => {
+        if (pad.vazio()) { toast('Faça sua assinatura no quadro.', true); return; }
+        if (!box.querySelector('#assOk').checked) { toast('Marque a confirmação.', true); return; }
+        const b = e.currentTarget; b.disabled = true; b.innerHTML = '<span class="spin"></span> Salvando…';
+        try {
+          await S.salvarAssinatura(token, pad.exportar());
+          box.innerHTML = `<div class="pa-sucesso">${icon('check', 40)}<h2>Assinatura salva!</h2><p>Obrigado, ${esc(info.nome.split(' ')[0])}. Você já pode fechar esta página.</p></div>
+            <a class="btn btn-ghost" style="width:100%" href="#/inicio">Ir para o sistema</a>`;
+        } catch (err) { toast(err.message, true); b.disabled = false; b.textContent = 'Salvar assinatura'; }
+      };
+    } catch (err) {
+      box.innerHTML = `<div class="empty">${icon('x', 28)}<p>${esc(err.message)}</p><a class="btn btn-ghost" href="#/inicio">Ir para o sistema</a></div>`;
+    }
   }
 
   // ========== INÍCIO ==========
@@ -340,6 +467,7 @@
         <a class="btn btn-accent" href="#/nova">${icon('plus', 18)} Nova solicitação</a>
       </div>
       ${u.nivel >= 3 && S.acessosPendentes() ? `<a class="aviso-acesso" href="#/acessos">${icon('bell', 20)}<div><b>${S.acessosPendentes()} novo(s) cadastro(s) aguardando sua aprovação</b><div class="small">Defina o perfil (Comprador, Supervisor ou Gerente) para liberar o acesso.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
+      ${u.nivel >= 3 && S.fornecedoresPendentes() ? `<a class="aviso-acesso" href="#/credenciamento">${icon('truck', 20)}<div><b>${S.fornecedoresPendentes()} fornecedor(es) aguardando credenciamento</b><div class="small">Confira os dados e credencie ou recuse.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
       <div class="kpis">
         <div class="kpi destaque"><div class="lbl">Sua alçada</div><div class="val">${brl(lim[u.nivel])}</div><div class="sub">Aprova sozinho até este valor</div></div>
         <div class="kpi"><div class="lbl">Minhas pendentes</div><div class="val">${minhas.filter(r => r.status === 'pendente').length}</div><div class="sub">aguardando aprovação</div></div>
@@ -349,7 +477,7 @@
       <div class="card">
         <div class="card-head"><h2>Alçadas de aprovação</h2></div>
         <div class="alcada">
-          ${[1, 2, 3].map(n => `<div class="lvl ${n === u.nivel ? 'me' : ''}"><span class="small muted">Nível 0${n} · ${esc(S.nomeNivel(n))}</span><b>até ${brl(lim[n])}</b></div>`).join('')}
+          ${[1, 2, 3].map(n => `<div class="lvl ${n === u.nivel ? 'me' : ''}"><span class="small muted">${esc(S.nomeNivel(n))}</span><b>até ${brl(lim[n])}</b></div>`).join('')}
           <div class="lvl"><span class="small muted">${esc(C.instanciaSuperior)}</span><b>acima de ${brl(lim[3])}</b></div>
         </div>
       </div>
@@ -497,12 +625,17 @@
             ${sel('categoria', 'Categoria')}
           </div>
           <div class="field" style="margin:12px 0 0"><label>Motivo da compra *</label><textarea name="justificativa" rows="2" required placeholder="Descreva por que esta compra é necessária"></textarea></div>
+          <div class="local-info" id="localInfo">${icon('home', 14)} Detectando a cidade da solicitação…</div>
         </div>
         <div class="card card-compacto">
           <h2 class="card-titulo"><span class="passo">2</span> Fornecedor</h2>
           <label for="inForn">Nome do fornecedor</label>
           <input id="inForn" name="fornecedor" placeholder="Digite 3 letras do nome, nome fantasia ou CNPJ">
           <div id="fornInfo"></div>
+          <div class="grid g2 pagto" style="margin-top:14px">
+            <div><label>Condição de pagamento *</label><select name="formaPgto" required><option value="">Selecione…</option>${opts(['PIX', 'Boleto', 'Transferência bancária', 'Cartão de crédito', 'Dinheiro'])}</select></div>
+            <div id="prazoBox" hidden><label id="prazoLbl">Prazo do boleto (dias) *</label><input name="prazo" placeholder="Ex.: 28  ou  30/60/90"><div class="campo-hint muted" id="prazoHint">Para parcelas, separe os dias com barra: 30/60/90</div></div>
+          </div>
         </div>
         <div class="card">
           <div class="card-head"><h2 class="card-titulo" style="margin:0"><span class="passo">3</span> Itens</h2><button type="button" class="btn btn-ghost btn-sm" id="addItem">${icon('plus', 16)} Adicionar item</button></div>
@@ -596,6 +729,28 @@
       });
     });
 
+    // --- condição de pagamento ---
+    const fp = el.querySelector('[name=formaPgto]'), prazoBox = el.querySelector('#prazoBox'), prazo = el.querySelector('[name=prazo]');
+    fp.addEventListener('change', () => {
+      const v = fp.value; prazoBox.hidden = !(v === 'Boleto' || v === 'Cartão de crédito');
+      el.querySelector('#prazoLbl').textContent = v === 'Cartão de crédito' ? 'Parcelas *' : 'Prazo do boleto (dias) *';
+      prazo.placeholder = v === 'Cartão de crédito' ? 'Ex.: 3' : 'Ex.: 28  ou  30/60/90';
+      el.querySelector('#prazoHint').textContent = v === 'Cartão de crédito' ? 'Número de parcelas (1 = à vista)' : 'Para parcelas, separe os dias com barra: 30/60/90';
+      prazo.required = !prazoBox.hidden;
+    });
+    const condicaoPagamento = () => {
+      const v = fp.value, pz = (prazo.value.match(/\d+/g) || []).join('/');
+      if (v === 'Boleto') return pz ? `Boleto ${pz} dias` : '';
+      if (v === 'Cartão de crédito') return pz ? `Cartão de crédito ${pz}x` : '';
+      return v;
+    };
+
+    // --- cidade (geolocalização de quem solicita) ---
+    let cidade = '';
+    const localInfo = el.querySelector('#localInfo');
+    S.cidadeAtual().then(c => { cidade = c; localInfo.innerHTML = `${icon('home', 14)} Cidade da solicitação: <b>${esc(c)}</b>`; })
+      .catch(e => { localInfo.innerHTML = `${icon('home', 14)} ${esc(e.message)} Será usada a filial selecionada.`; localInfo.classList.add('aviso'); });
+
     // --- fornecedor ---
     const fIn = el.querySelector('#inForn'), fInfo = el.querySelector('#fornInfo');
     const acharForn = v => S.fornecedores().find(f => semAcento(f.nome) === semAcento(v) || (f.nomeFantasia && semAcento(f.nomeFantasia) === semAcento(v)));
@@ -606,7 +761,7 @@
       if (f) {
         const end = [f.endereco, [f.cidade, f.uf].filter(Boolean).join('/'), f.cep ? 'CEP ' + f.cep : ''].filter(Boolean).join(' · ');
         fInfo.innerHTML = `<div class="forn-info">
-          <div class="forn-info-top"><span class="status st-aprovado">Cadastrado</span>${f.situacao && !/ATIVA/.test(f.situacao) ? situacaoTag(f.situacao) : ''}<button type="button" class="btn-mini" id="edForn">Ver / editar cadastro</button></div>
+          <div class="forn-info-top">${f.statusCred === 'pendente' ? '<span class="status st-pendente">Cadastrado · aguardando credenciamento</span>' : f.statusCred === 'recusado' ? '<span class="status st-reprovado">Credenciamento recusado</span>' : '<span class="status st-aprovado">Credenciado</span>'}${f.situacao && !/ATIVA/.test(f.situacao) ? situacaoTag(f.situacao) : ''}<button type="button" class="btn-mini" id="edForn">Ver / editar cadastro</button></div>
           <div class="forn-grid">
             <div><span>CNPJ / CPF</span>${esc(f.cnpj || '—')}</div>
             ${f.inscricaoEstadual ? `<div><span>Inscrição estadual</span>${esc(f.inscricaoEstadual)}</div>` : ''}
@@ -711,18 +866,38 @@
       const f = e.target;
       const anexos = orcs.filter(orcCompleto);
       if (anexos.length < minOrc) { toast(`Anexe pelo menos ${minOrc} orçamentos (com fornecedor e arquivo).`, true); el.querySelector('#orcLinhas').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      const cond = condicaoPagamento();
+      if (!cond) { toast('Informe a condição de pagamento (e o prazo, se for boleto ou cartão).', true); fp.focus(); return; }
       executar(el.querySelector('#btnEnviar'), () => S.criarSolicitacao({
         filial: f.filial.value, centroCusto: f.centroCusto.value, categoria: f.categoria.value,
-        fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens
+        fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens,
+        condicaoPagamento: cond, cidade: cidade || f.filial.value.replace(/ \(.*\)/, '')
       }, anexos.map(o => ({ fornecedor: o.fornecedor.trim(), valor: o.valor, file: o.file }))), j => {
         const c = j.state.extra.criado;
         return c.status === 'aprovado' ? `${c.numero} criada e aprovada na sua alçada.` : `${c.numero} enviada para aprovação (${S.nomeNivel(c.nivelNecessario)}).`;
-      }, j => {
+      }, async j => {
         const id = j.state.extra.criado.id;
+        await gerarPdfPedido(id, { baixar: true });
         if (location.hash === '#/solicitacoes') render(); else location.hash = '#/solicitacoes';
         setTimeout(() => abrirDetalhe(id), 0);
       }, `Enviando solicitação e ${anexos.length} orçamentos…`);
     });
+  }
+
+  // ---------- PDF do pedido ----------
+  async function gerarPdfPedido(id, o) {
+    o = o || {};
+    const r = S.getRequest(id); if (!r) return;
+    mostrarCarregando(o.msg || `Gerando PDF do pedido ${r.numeroPdf || r.numero}…`);
+    try {
+      const nomeF = r.fornecedorFinal || r.fornecedor;
+      const forn = S.fornecedores().find(x => S.norm(x.nome) === S.norm(nomeF)) || null;
+      const ass = await S.assinaturas([r.solicitanteId, r.aprovadorId].filter(Boolean));
+      const blob = await window.CVPdf.gerar(S.getRequest(id) || r, forn, ass, n => S.nomeNivel(n));
+      if (o.baixar) window.CVPdf.baixar(blob, window.CVPdf.nomeArquivo(r));
+      if (o.salvar !== false) { try { await S.salvarPdf(id, blob); } catch (e) { toast('PDF gerado, mas não foi possível salvar no Drive: ' + e.message, true); } }
+    } catch (e) { toast('Não foi possível gerar o PDF: ' + e.message, true); }
+    esconderCarregando();
   }
 
   // ========== LISTA ==========
@@ -768,7 +943,8 @@
       </div>
       ${acima.length ? `<div class="card"><div class="card-head"><h2>Acima da sua alçada (${acima.length})</h2><span class="small muted">somente acompanhamento</span></div>${tabela(acima)}</div>` : ''}`;
     bindLinhas(el);
-    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), 'Solicitação aprovada.'));
+    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), 'Solicitação aprovada.',
+      async () => { await gerarPdfPedido(b.dataset.ap, { msg: 'Atualizando o PDF com a aprovação…' }); render(); }));
     el.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => abrirDetalhe(b.dataset.rp, 'reprovar'));
   }
 
@@ -792,15 +968,17 @@
       </div>
       <div style="margin-top:8px">${statusTag(r.status)} ${r.status === 'pendente' ? `<span class="small muted">aguardando <b>${esc(S.nomeNivel(r.nivelNecessario))}</b></span>` : ''}</div>
       <div class="dl">
-        <div><span>Solicitante</span>${esc(r.solicitanteNome)} <span class="nivel-tag">N0${r.nivelSolicitante}</span></div>
+        <div><span>Solicitante</span>${esc(r.solicitanteNome)} <span class="nivel-tag">${esc(S.nomeNivel(r.nivelSolicitante))}</span></div>
         <div><span>Criada em</span>${dataHora(r.criadoEm)}</div>
         <div><span>Filial</span>${esc(r.filial)}</div>
         <div><span>Centro de custo</span>${esc(r.centroCusto)}</div>
         <div><span>Categoria</span>${esc(r.categoria)}</div>
         <div><span>Fornecedor sugerido</span>${esc(r.fornecedor || '—')}</div>
+        <div><span>Condição de pagamento</span>${esc(r.condicaoPagamento || '—')}</div>
+        <div><span>Cidade</span>${esc(r.cidade || '—')}</div>
         ${r.urgencia ? `<div><span>Urgência</span><b class="urg-${esc(r.urgencia)}">${esc(r.urgencia)}</b></div>` : ''}
         ${r.dataNecessidade ? `<div><span>Necessário até</span>${data(r.dataNecessidade)}</div>` : ''}
-        ${r.aprovadorNome ? `<div><span>${r.status === 'reprovado' ? 'Reprovado por' : 'Aprovado por'}</span>${esc(r.aprovadorNome)} (N0${r.nivelAprovador || ''})</div><div><span>Decisão em</span>${dataHora(r.decididoEm)}</div>` : ''}
+        ${r.aprovadorNome ? `<div><span>${r.status === 'reprovado' ? 'Reprovado por' : 'Aprovado por'}</span>${esc(r.aprovadorNome)}${r.nivelAprovador ? ' (' + esc(S.nomeNivel(r.nivelAprovador)) + ')' : ''}</div><div><span>Decisão em</span>${dataHora(r.decididoEm)}</div>` : ''}
         ${r.compradoEm ? `<div><span>Comprado de</span>${esc(r.fornecedorFinal || r.fornecedor || '—')}</div><div><span>Comprado em</span>${dataHora(r.compradoEm)}</div>` : ''}
       </div>
       ${r.justificativa ? `<h3>Motivo da compra</h3><p style="margin:6px 0 16px">${esc(r.justificativa)}</p>` : ''}
@@ -809,6 +987,14 @@
         <tbody>${r.itens.map(i => { const s = S.statsPreco(i.itemId, i.descricao); return `<tr><td>${esc(i.descricao)}${s && r.status !== 'comprado' ? `<div class="small muted">últ. pago ${brl(s.ultimo)} · méd. ${brl(s.media)}</div>` : ''}</td><td class="r num">${i.qtd} ${esc(i.unidade)}</td><td class="r num">${brl(i.valorUnit)}</td><td class="r num">${brl(i.qtd * i.valorUnit)}</td></tr>`; }).join('')}</tbody>
         <tfoot><tr><td colspan="3"><b>Total</b></td><td class="r num"><b>${brl(r.total)}</b></td></tr></tfoot></table></div>
 
+      <div class="pdf-box">
+        ${icon('file', 26)}
+        <div><b>Pedido de Compra Nº ${esc(r.numeroPdf || r.numero)}</b><div class="small muted">${r.pdfUrl ? 'Salvo no Drive · ' : ''}Com logo, fornecedor, itens, cidade, data da aprovação e assinaturas.</div></div>
+        <div class="pdf-acoes">
+          <button type="button" class="btn btn-primary btn-sm" id="btnPdf">${icon('file', 15)} Baixar PDF</button>
+          ${r.pdfUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(r.pdfUrl)}" target="_blank" rel="noopener">Abrir no Drive</a>` : ''}
+        </div>
+      </div>
       <h3 style="margin:20px 0 10px">Orçamentos (${orcs.length})</h3>
       ${orcs.length ? `<div class="orc-list">${orcs.map(o => `<div class="orc ${menorOrc && o.id === menorOrc.id && orcs.length > 1 ? 'melhor' : ''}">
           ${icon('file', 22)}
@@ -842,6 +1028,7 @@
       <ul class="timeline">${r.historico.map(h => `<li><b>${esc(h.acao)}</b><div class="small muted">${dataHora(h.em)} · ${esc(h.usuario)}</div>${h.obs ? `<div class="small">“${esc(h.obs)}”</div>` : ''}</li>`).join('')}</ul>
     `, (bg) => {
       bg.querySelector('.drawer').setAttribute('aria-label', 'Solicitação ' + r.numero);
+      bg.querySelector('#btnPdf').onclick = () => gerarPdfPedido(r.id, { baixar: true, salvar: !r.pdfUrl && (r.solicitanteId === u.id || u.nivel >= 2) });
       bg.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
         const obs = bg.querySelector('#obs').value;
         const a = b.dataset.act;
@@ -851,7 +1038,8 @@
           comprar: () => S.act('markPurchased', { id: r.id, obs, fornecedor: bg.querySelector('#fornFinal').value }),
           cancelar: () => S.act('cancel', { id: r.id, obs })
         };
-        executar(b, acoes[a], { aprovar: 'Solicitação aprovada.', reprovar: 'Solicitação reprovada.', comprar: 'Compra registrada e preços salvos no histórico.', cancelar: 'Solicitação cancelada.' }[a]);
+        executar(b, acoes[a], { aprovar: 'Solicitação aprovada.', reprovar: 'Solicitação reprovada.', comprar: 'Compra registrada e preços salvos no histórico.', cancelar: 'Solicitação cancelada.' }[a],
+          ['aprovar', 'reprovar'].includes(a) ? async () => { await gerarPdfPedido(r.id, { msg: 'Atualizando o PDF com a aprovação…' }); render(); abrirDetalhe(r.id); } : undefined);
       });
       const fo = bg.querySelector('#fOrc');
       if (fo) fo.addEventListener('submit', e => {
@@ -869,13 +1057,13 @@
   // ========== CADASTROS: ITENS, FORNECEDORES, PREÇOS ==========
   function vCadastros(el, u, aba) {
     aba = ['itens', 'fornecedores', 'precos'].includes(aba) ? aba : 'itens';
+    const TIT = {
+      itens: ['Itens', `${S.catalogo().length} itens cadastrados. Clique em um item para ver o histórico de preços.`],
+      fornecedores: ['Fornecedores', `${S.fornecedores().length} fornecedores. Novos cadastros passam pelo credenciamento de um gerente.`],
+      precos: ['Histórico de preços', 'Preços pagos, gravados automaticamente a cada compra efetivada.']
+    }[aba];
     el.innerHTML = `
-      <div class="page-head"><div><h1>Itens e fornecedores</h1><p>Cadastros compartilhados${S.modo === 'google' ? ' — salvos na planilha Google' : ''}.</p></div></div>
-      <div class="tabs">
-        <a href="#/cadastros/itens" class="${aba === 'itens' ? 'on' : ''}">Itens (${S.catalogo().length})</a>
-        <a href="#/cadastros/fornecedores" class="${aba === 'fornecedores' ? 'on' : ''}">Fornecedores (${S.fornecedores().length})</a>
-        <a href="#/cadastros/precos" class="${aba === 'precos' ? 'on' : ''}">Histórico de preços</a>
-      </div>
+      <div class="page-head"><div><h1>${TIT[0]}</h1><p>${TIT[1]}</p></div></div>
       <div id="aba"></div>`;
     const box = el.querySelector('#aba');
     ({ itens: abaItens, fornecedores: abaFornecedores, precos: abaPrecos })[aba](box, u);
@@ -972,7 +1160,7 @@
       box.querySelector('#lista').innerHTML = l.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Fornecedor</th><th class="hide-sm">Contato</th><th class="hide-sm">Categorias</th>${u.nivel >= 2 ? '<th class="r">Comprado</th>' : ''}<th></th></tr></thead>
         <tbody>${l.map(f => `<tr class="${ativo(f) ? '' : 'inativo'}">
-          <td><b>${esc(f.nome)}</b>${f.situacao && !/ATIVA/.test(f.situacao) ? ' ' + situacaoTag(f.situacao) : ''}<div class="small muted">${[f.nomeFantasia, f.cnpj, f.inscricaoEstadual ? 'IE ' + f.inscricaoEstadual : '', [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).map(esc).join(' · ')}${ativo(f) ? '' : ' · inativo'}</div></td>
+          <td><b>${esc(f.nome)}</b> ${credTag(f)}${f.situacao && !/ATIVA/.test(f.situacao) ? ' ' + situacaoTag(f.situacao) : ''}<div class="small muted">${[f.nomeFantasia, f.cnpj, f.inscricaoEstadual ? 'IE ' + f.inscricaoEstadual : '', [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).map(esc).join(' · ')}${ativo(f) ? '' : ' · inativo'}</div></td>
           <td class="hide-sm">${esc(f.contato)}<div class="small muted">${[f.telefone, f.email].filter(Boolean).map(esc).join(' · ')}</div></td>
           <td class="hide-sm small">${esc(f.categorias)}</td>
           ${u.nivel >= 2 ? `<td class="r num">${gasto[S.norm(f.nome)] ? brl(gasto[S.norm(f.nome)]) : '—'}</td>` : ''}
@@ -986,6 +1174,7 @@
     pintar();
   }
 
+  const credTag = f => f.statusCred === 'pendente' ? '<span class="status st-pendente">Aguardando credenciamento</span>' : f.statusCred === 'recusado' ? '<span class="status st-reprovado">Credenciamento recusado</span>' : '';
   const situacaoTag = s => s ? `<span class="status ${/ATIVA/.test(s) ? 'st-aprovado' : 'st-reprovado'}">Receita: ${esc(s)}</span>` : '';
 
   function formFornecedor(f, o) {
@@ -1056,7 +1245,7 @@
         e.preventDefault();
         const d = { id: f ? f.id : '' };
         ['nome', 'cnpj', 'nomeFantasia', 'inscricaoEstadual', 'endereco', 'cidade', 'uf', 'cep', 'contato', 'telefone', 'email', 'categorias', 'situacao', 'atividade'].forEach(k => { d[k] = fm[k].value; });
-        executar(fm.querySelector('button[class~="btn-primary"]'), () => S.act('saveFornecedor', { fornecedor: d }), 'Fornecedor salvo.',
+        executar(fm.querySelector('button[class~="btn-primary"]'), () => S.act('saveFornecedor', { fornecedor: d }), j => j.state.extra.msg || 'Fornecedor salvo.',
           o.onSaved ? j => { fechar(); o.onSaved(j.state.extra.salvo); } : undefined);
       });
     });
@@ -1123,7 +1312,7 @@
       const agrupar = (arr, fn) => { const o = {}; arr.forEach(r => { const k = fn(r); if (k) o[k] = (o[k] || 0) + Number(r.total); }); return Object.entries(o).sort((a, b) => b[1] - a[1]); };
       const porCC = agrupar(aprov, r => r.centroCusto);
       const porForn = agrupar(l.filter(r => r.status === 'comprado'), r => r.fornecedorFinal || r.fornecedor).slice(0, 6);
-      const porNivel = [1, 2, 3].map(n => { const x = aprov.filter(r => Number(r.nivelAprovador) === n); return [`N0${n} · ${S.nomeNivel(n)}`, x.length, soma(x)]; });
+      const porNivel = [1, 2, 3].map(n => { const x = aprov.filter(r => Number(r.nivelAprovador) === n); return [`${S.nomeNivel(n)}`, x.length, soma(x)]; });
       const hbars = (rows, fmt) => { const mx = Math.max(1, ...rows.map(r => r[1])); return rows.length ? rows.map(([k, v]) => `<div class="hbar"><span class="lbl" title="${esc(k)}">${esc(k)}</span><div class="track"><div class="fill" style="width:${(v / mx * 100).toFixed(1)}%"></div></div><span class="num small"><b>${fmt(v)}</b></span></div>`).join('') : '<div class="empty">Sem dados no período.</div>'; };
 
       el.querySelector('#dash').innerHTML = `
@@ -1151,6 +1340,51 @@
     pintar();
   }
 
+  // ========== CREDENCIAMENTO DE FORNECEDORES (Gerente) ==========
+  function vCredenciamento(el) {
+    const todos = S.fornecedores();
+    const pend = todos.filter(f => f.statusCred === 'pendente');
+    const hist = todos.filter(f => f.credAnalisadoEm && f.statusCred !== 'pendente' && f.credAnalisadoPor !== 'Sistema').sort((a, b) => String(b.credAnalisadoEm).localeCompare(String(a.credAnalisadoEm))).slice(0, 12);
+    el.innerHTML = `
+      <div class="page-head"><div><h1>Credenciamento de fornecedores</h1><p>Fornecedores cadastrados por compradores e supervisores aguardando aprovação.</p></div></div>
+      ${pend.length ? `<div class="acessos-lista">${pend.map(f => `<div class="card acesso" data-id="${f.id}">
+        <div class="acesso-topo">
+          <div class="avatar">${icon('truck', 18)}</div>
+          <div class="acesso-quem"><b>${esc(f.nome)}</b><div class="small muted">${esc(f.nomeFantasia || '')}</div></div>
+          <span class="status st-pendente">Aguardando</span>
+        </div>
+        <div class="acesso-dados">
+          <div><span>CNPJ / CPF</span>${esc(f.cnpj || '—')}</div>
+          <div><span>Inscrição estadual</span>${esc(f.inscricaoEstadual || '—')}</div>
+          <div style="grid-column:1/-1"><span>Endereço</span>${esc([f.endereco, [f.cidade, f.uf].filter(Boolean).join('/'), f.cep].filter(Boolean).join(' · ') || '—')}</div>
+          <div><span>Contato</span>${esc([f.contato, f.telefone, f.email].filter(Boolean).join(' · ') || '—')}</div>
+          <div><span>Situação na Receita</span>${f.situacao ? situacaoTag(f.situacao) : '—'}</div>
+          <div><span>Categorias</span>${esc(f.categorias || '—')}</div>
+          <div><span>Cadastrado por</span>${esc(f.cadastradoPor || '—')} · ${data(f.criadoEm)}</div>
+        </div>
+        <div class="acoes" style="margin-top:4px">
+          <button class="btn btn-primary" data-ok>${icon('shield', 16)} Credenciar</button>
+          <button class="btn btn-ghost" data-ed>Ver / editar</button>
+          <button class="btn btn-danger" data-no>Recusar</button>
+        </div>
+      </div>`).join('')}</div>`
+      : `<div class="card"><div class="empty">${icon('check', 28)}<p>Nenhum fornecedor aguardando credenciamento.</p></div></div>`}
+      ${hist.length ? `<div class="card"><div class="card-head"><h2>Últimas análises</h2></div><div class="table-wrap"><table>
+        <thead><tr><th>Fornecedor</th><th>Resultado</th><th class="hide-sm">Por</th><th class="hide-sm">Em</th></tr></thead>
+        <tbody>${hist.map(f => `<tr><td><b>${esc(f.nome)}</b><div class="small muted">${esc(f.cnpj || '')}</div></td>
+          <td>${f.statusCred === 'recusado' ? `<span class="status st-reprovado">Recusado</span>${f.credObs ? `<div class="small muted">${esc(f.credObs)}</div>` : ''}` : '<span class="status st-aprovado">Credenciado</span>'}</td>
+          <td class="hide-sm">${esc(f.credAnalisadoPor)}</td><td class="hide-sm num">${dataHora(f.credAnalisadoEm)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+    el.querySelectorAll('.acesso').forEach(c => {
+      const id = c.dataset.id;
+      c.querySelector('[data-ok]').onclick = e => executar(e.currentTarget, () => S.act('aprovarFornecedor', { id }), j => j.state.extra.msg || 'Fornecedor credenciado.');
+      c.querySelector('[data-ed]').onclick = () => formFornecedor(todos.find(f => f.id === id));
+      c.querySelector('[data-no]').onclick = e => {
+        const motivo = prompt('Motivo da recusa (opcional):', ''); if (motivo === null) return;
+        executar(e.currentTarget, () => S.act('recusarFornecedor', { id, motivo }), 'Credenciamento recusado.');
+      };
+    });
+  }
+
   // ========== ACESSOS (Gerente aprova novos cadastros) ==========
   function vAcessos(el, u) {
     const todos = S.listUsers();
@@ -1170,7 +1404,7 @@
           <div><span>Solicitado em</span>${dataHora(x.criadoEm)}</div>
         </div>
         <div class="grid g2 acesso-form">
-          <div><label>Perfil do usuário *</label><select name="nivel" required><option value="">Selecione o perfil…</option>${[1, 2, 3].map(n => `<option value="${n}">Nível 0${n} — ${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+          <div><label>Perfil do usuário *</label><select name="nivel" required><option value="">Selecione o perfil…</option>${[1, 2, 3].map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
           <div><label>Filial</label><select name="filial"><option value="">—</option>${opts(L.filial)}</select></div>
         </div>
         <div class="acoes" style="margin-top:12px">
@@ -1182,7 +1416,7 @@
       ${hist.length ? `<div class="card"><div class="card-head"><h2>Últimas análises</h2></div><div class="table-wrap"><table>
         <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Resultado</th><th class="hide-sm">Por</th><th class="hide-sm">Em</th></tr></thead>
         <tbody>${hist.map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td>
-          <td>${x.status === 'recusado' ? `<span class="status st-reprovado">Recusado</span>${x.obsAcesso ? `<div class="small muted">${esc(x.obsAcesso)}</div>` : ''}` : `<span class="nivel-tag">N0${x.nivel} · ${esc(S.nomeNivel(x.nivel))}</span>`}</td>
+          <td>${x.status === 'recusado' ? `<span class="status st-reprovado">Recusado</span>${x.obsAcesso ? `<div class="small muted">${esc(x.obsAcesso)}</div>` : ''}` : `<span class="nivel-tag">${esc(S.nomeNivel(x.nivel))}</span>`}</td>
           <td class="hide-sm">${esc(x.aprovadoPor)}</td><td class="hide-sm num">${dataHora(x.aprovadoEm)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     el.querySelectorAll('.acesso').forEach(c => {
       const id = c.dataset.id;
@@ -1230,7 +1464,7 @@
       ${S.superAdmin() ? `<div class="card">
         <div class="card-head"><h2>Alçadas e regras</h2><span class="small muted">visível só para o administrador</span></div>
         <form id="fLim" class="grid g4" style="align-items:end">
-          ${[1, 2, 3].map(n => `<div><label>Nível 0${n} — ${esc(S.nomeNivel(n))} (R$)</label><input type="number" min="1" step="0.01" name="l${n}" value="${lim[n]}"></div>`).join('')}
+          ${[1, 2, 3].map(n => `<div><label>${esc(S.nomeNivel(n))} (R$)</label><input type="number" min="1" step="0.01" name="l${n}" value="${lim[n]}"></div>`).join('')}
           <div><button class="btn btn-primary" style="width:100%">Salvar</button></div>
           <div><label>Mínimo de orçamentos por solicitação</label><input type="number" min="0" max="10" step="1" name="minOrc" value="${S.minOrcamentos()}"></div>
         </form>
@@ -1239,8 +1473,9 @@
       <div class="card">
         <div class="card-head"><h2>Usuários</h2>${S.acessosPendentes() ? `<a href="#/acessos" class="btn-mini laranja">${S.acessosPendentes()} aguardando aprovação</a>` : ''}<button class="btn btn-accent btn-sm" id="novoU">${icon('plus', 16)} Novo usuário</button></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Nível</th><th class="hide-sm">Filial</th><th>Status</th><th></th></tr></thead>
-          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">N0${x.nivel} · ${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td class="hide-sm">${esc(x.filial)}</td>
+          <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Perfil</th><th class="hide-sm">Filial</th><th>Assinatura</th><th>Status</th><th></th></tr></thead>
+          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td class="hide-sm">${esc(x.filial)}</td>
+            <td>${x.temAssinatura ? '<span class="status st-aprovado">Cadastrada</span>' : '<span class="status st-pendente">Pendente</span>'}<div><button class="btn-mini" data-lk="${x.id}" title="Gerar link para a pessoa assinar">${icon('link', 12)} ${x.temAssinatura ? 'Novo link' : 'Gerar link'}</button></div></td>
             <td>${x.status === 'recusado' ? '<span class="status st-reprovado">Recusado</span>' : x.ativo ? '<span class="status st-aprovado">Ativo</span>' : '<span class="status st-cancelado">Inativo</span>'}</td>
             <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${x.id}">Editar</button> ${x.id !== u.id ? `<button class="btn btn-ghost btn-sm" data-tg="${x.id}">${x.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}</td></tr>`).join('')}</tbody>
         </table></div>
@@ -1250,7 +1485,7 @@
             <div><label>Nome *</label><input name="nome" required></div>
             <div><label>E-mail *</label><input name="email" type="email" required></div>
             <div><label>Senha <span class="muted" id="senhaHint"></span></label><input name="senha" type="text" autocomplete="off"></div>
-            <div><label>Nível</label><select name="nivel">${[1, 2, 3].map(n => `<option value="${n}">Nível 0${n} — ${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+            <div><label>Perfil</label><select name="nivel">${[1, 2, 3].map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
             <div><label>Filial</label><select name="filial"></select></div>
             <div style="display:flex;gap:8px;align-items:end"><button class="btn btn-primary">Salvar</button><button type="button" class="btn btn-ghost" id="cancU">Cancelar</button></div>
           </div>
@@ -1291,6 +1526,7 @@
     el.querySelector('#cancU').onclick = () => fU.classList.add('hidden');
     el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => abrirForm(users.find(x => x.id === b.dataset.ed)));
     el.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => executar(b, () => S.act('toggleUser', { id: b.dataset.tg }), 'Usuário atualizado.'));
+    el.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => executar(b, () => S.act('gerarLinkAssinatura', { id: b.dataset.lk }), null, j => { render(); mostrarLinkAssinatura(j.state.extra.nome, j.state.extra.token); }));
     fU.addEventListener('submit', e => {
       e.preventDefault();
       executar(fU.querySelector('button'), () => S.act('saveUser', { user: { id: fU.id.value, nome: fU.nome.value.trim(), email: fU.email.value, senha: fU.senha.value, nivel: fU.nivel.value, filial: fU.filial.value } }), 'Usuário salvo.');

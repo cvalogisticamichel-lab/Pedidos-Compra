@@ -397,3 +397,26 @@ button.link { background: none; border: 0; padding: 0; font: inherit; font-weigh
   .login-form { padding-bottom: 90px; }
 }
 @media (max-width: 760px) { .login-wrap { grid-template-columns: 1fr; } }
+
+/* ---------- v2.5: menu em grupos, pagamento, PDF, assinatura ---------- */
+.nav-grupo { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: rgba(207, 230, 214, .55); padding: 14px 12px 4px; }
+.local-info { margin-top: 10px; font-size: .82rem; color: var(--verde-700); display: flex; align-items: center; gap: 6px; }
+.local-info.aviso { color: var(--pend); }
+.pdf-box { display: flex; align-items: center; gap: 12px; margin-top: 18px; border: 1px solid var(--verde-100); background: var(--verde-50); border-radius: 12px; padding: 12px 14px; }
+.pdf-box > svg { color: var(--erro); flex: none; }
+.pdf-box > div:nth-child(2) { flex: 1; min-width: 0; }
+.pdf-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.pad { position: relative; border: 1.5px dashed var(--verde-500); border-radius: 12px; background: #fff; height: 190px; touch-action: none; }
+.pad canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.pad-linha { position: absolute; left: 8%; right: 8%; bottom: 44px; border-bottom: 1px solid #c9d6ce; pointer-events: none; }
+.pad-dica { position: absolute; left: 8%; bottom: 20px; font-size: .8rem; color: var(--tinta-3); pointer-events: none; }
+.pad-limpar { position: absolute; right: 8px; top: 8px; }
+.link-box { display: flex; gap: 8px; margin: 14px 0 4px; }
+.link-box input { flex: 1; min-width: 0; font-size: .85rem; background: var(--verde-50); }
+.assinar-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 90% at 30% 20%, #fff 0%, #f1f8f2 60%, #e2f1e6 100%); }
+.assinar-card { width: 100%; max-width: 560px; }
+.assinar-logo svg { width: 240px; height: auto; display: block; margin: 0 auto 18px; }
+.assinar-card h1 { margin-bottom: 6px; }
+.check { display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--tinta-2); margin: 14px 0; }
+.check input { width: auto; }
+@media (max-width: 760px) { .nav-grupo { display: none; } .pdf-box { flex-wrap: wrap; } }

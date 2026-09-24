@@ -11,22 +11,22 @@ var CVEngine = (function () {
 
   // Cada chave = nome da aba na planilha; valores = colunas (ordem da planilha)
   var TABELAS = {
-    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal'],
+    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId'],
     Itens_Solicitacao: ['solicitacaoId', 'numero', 'seq', 'itemId', 'descricao', 'qtd', 'unidade', 'valorUnit', 'subtotal'],
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
     Itens: ['id', 'codigo', 'descricao', 'unidade', 'categoria', 'fornecedorPreferido', 'ultimoPreco', 'ultimaCompra', 'ativo', 'criadoEm'],
-    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual'],
+    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual', 'statusCred', 'cadastradoPor', 'credAnalisadoPor', 'credAnalisadoEm', 'credObs'],
     Listas: ['filial', 'centroCusto', 'categoria', 'unidade'],
     Historico_Precos: ['em', 'itemId', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero', 'solicitacaoId'],
-    Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm', 'cpf', 'status', 'aprovadoPor', 'aprovadoEm', 'obsAcesso'],
+    Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm', 'cpf', 'status', 'aprovadoPor', 'aprovadoEm', 'obsAcesso', 'assinatura', 'tokenAssinatura'],
     Config: ['chave', 'valor']
   };
   // Tipos para conversão ao ler/gravar na planilha
   var NUMEROS = ['nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
-  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm'];
+  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm', 'credAnalisadoEm'];
   var BOOLEANOS = ['ativo'];
-  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf'];
+  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf', 'numeroPdf', 'tokenAssinatura'];
 
   var PADRAO = { limites: { 1: 2000, 2: 10000, 3: 50000 } };
   var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria' };
@@ -79,7 +79,7 @@ var CVEngine = (function () {
   function minOrcamentos(db) { var v = cfg(db, 'min_orcamentos', 3); return v === '' || v == null || isNaN(Number(v)) ? 3 : Number(v); }
   function nivelNecessario(lim, total) { for (var n = 1; n <= 3; n++) if (total <= Number(lim[n])) return n; return 4; }
   function podeAprovar(u, r) { return !!u && r.status === 'pendente' && Number(r.nivelNecessario) <= Number(u.nivel) && Number(r.nivelNecessario) <= 3; }
-  function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel) || 0, filial: u.filial, ativo: u.ativo !== false, status: statusUsuario(u), cpf: u.cpf || '', criadoEm: u.criadoEm || '', aprovadoPor: u.aprovadoPor || '', aprovadoEm: u.aprovadoEm || '', obsAcesso: u.obsAcesso || '' }; }
+  function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel) || 0, filial: u.filial, ativo: u.ativo !== false, status: statusUsuario(u), cpf: u.cpf || '', criadoEm: u.criadoEm || '', aprovadoPor: u.aprovadoPor || '', aprovadoEm: u.aprovadoEm || '', obsAcesso: u.obsAcesso || '', temAssinatura: !!u.assinatura }; }
   function hist(db, r, usuario, acao, obs, em) {
     db.Historico.push({ solicitacaoId: r.id, numero: r.numero, em: em || agora(), usuario: usuario, acao: acao, obs: txt(obs) });
     sujar(db, 'Historico');
@@ -209,6 +209,8 @@ var CVEngine = (function () {
       minOrcamentos: minOrcamentos(db),
       superAdmin: ehSuperAdmin(u),
       acessosPendentes: Number(u.nivel) >= 3 ? db.Usuarios.filter(function (x) { return x.status === 'pendente'; }).length : 0,
+      fornecedoresPendentes: Number(u.nivel) >= 3 ? db.Fornecedores.filter(function (x) { return x.statusCred === 'pendente'; }).length : 0,
+      temAssinatura: !!u.assinatura,
       requests: reqs,
       users: Number(u.nivel) >= 3 ? db.Usuarios.map(publico) : [],
       listas: listas(db),
@@ -225,6 +227,7 @@ var CVEngine = (function () {
     if (!txt(d.centroCusto)) erro('Informe o centro de custo.');
     if (!txt(d.categoria)) erro('Informe a categoria.');
     if (!txt(d.justificativa)) erro('Informe o motivo da compra.');
+    if (!txt(d.condicaoPagamento)) erro('Informe a condição de pagamento.');
     var itens = (d.itens || []).map(function (i) {
       return { itemId: txt(i.itemId), descricao: txt(i.descricao), unidade: txt(i.unidade) || 'un', qtd: Number(i.qtd) || 0, valorUnit: r2(i.valorUnit) };
     }).filter(function (i) { return i.descricao && i.qtd > 0; });
@@ -238,7 +241,8 @@ var CVEngine = (function () {
       filial: txt(d.filial) || u.filial, centroCusto: txt(d.centroCusto), categoria: txt(d.categoria),
       fornecedor: txt(d.fornecedor), urgencia: txt(d.urgencia), dataNecessidade: txt(d.dataNecessidade),
       justificativa: txt(d.justificativa), total: total, nivelNecessario: nivelNecessario(limites(db), total),
-      status: 'pendente', aprovadorId: '', aprovadorNome: '', nivelAprovador: '', decididoEm: '', compradoEm: '', fornecedorFinal: ''
+      status: 'pendente', aprovadorId: '', aprovadorNome: '', nivelAprovador: '', decididoEm: '', compradoEm: '', fornecedorFinal: '',
+      condicaoPagamento: txt(d.condicaoPagamento), numeroPdf: pad(proximo(db, 'seq_pdf_' + ano), 3) + '/' + ano, cidade: txt(d.cidade), pdfUrl: '', pdfId: ''
     };
     db.Solicitacoes.push(r);
     itens.forEach(function (i, k) {
@@ -273,7 +277,7 @@ var CVEngine = (function () {
     r.status = 'comprado'; r.compradoEm = em; r.fornecedorFinal = forn;
     sujar(db, 'Solicitacoes', 'Itens', 'Historico_Precos');
     if (forn && !fornPorNome(db, forn)) {
-      db.Fornecedores.push({ id: ctx.uuid(), nome: forn, cnpj: '', contato: '', telefone: '', email: '', cidade: '', categorias: r.categoria, ativo: true, criadoEm: em });
+      db.Fornecedores.push({ id: ctx.uuid(), nome: forn, cnpj: '', contato: '', telefone: '', email: '', cidade: '', categorias: r.categoria, ativo: true, criadoEm: em, statusCred: 'pendente', cadastradoPor: u.nome + ' (compra ' + r.numero + ')', credAnalisadoPor: '', credAnalisadoEm: '', credObs: '' });
       sujar(db, 'Fornecedores');
     }
     db.Itens_Solicitacao.filter(function (i) { return i.solicitacaoId === r.id; }).forEach(function (i) {
@@ -375,11 +379,45 @@ var CVEngine = (function () {
           nomeFantasia: txt(f.nomeFantasia), endereco: txt(f.endereco), uf: txt(f.uf).toUpperCase(), cep: txt(f.cep), situacao: txt(f.situacao), atividade: txt(f.atividade), inscricaoEstadual: txt(f.inscricaoEstadual) };
         var fx;
         if (f.id) { fx = porId(db.Fornecedores, f.id); if (!fx) erro('Fornecedor não encontrado.'); for (var k in campos) fx[k] = campos[k]; }
-        else { fx = campos; campos.id = ctx.uuid(); campos.ativo = true; campos.criadoEm = agora(); db.Fornecedores.push(campos); }
+        else {
+          fx = campos; campos.id = ctx.uuid(); campos.ativo = true; campos.criadoEm = agora(); campos.cadastradoPor = u.nome;
+          var auto = Number(u.nivel) >= 3;   // gerente já credencia; demais aguardam aprovação
+          campos.statusCred = auto ? 'aprovado' : 'pendente'; campos.credAnalisadoPor = auto ? u.nome : ''; campos.credAnalisadoEm = auto ? agora() : ''; campos.credObs = '';
+          db.Fornecedores.push(campos);
+          extra.msg = auto ? 'Fornecedor cadastrado e credenciado.' : 'Fornecedor cadastrado. Aguardando credenciamento por um gerente.';
+        }
         extra.salvo = fx;
         sujar(db, 'Fornecedores');
         break;
       }
+      case 'aprovarFornecedor': case 'recusarFornecedor': {
+        exigir(u, 3);
+        var fc = porId(db.Fornecedores, p.id); if (!fc) erro('Fornecedor não encontrado.');
+        var ok = action === 'aprovarFornecedor';
+        fc.statusCred = ok ? 'aprovado' : 'recusado'; fc.credAnalisadoPor = u.nome; fc.credAnalisadoEm = agora(); fc.credObs = ok ? '' : txt(p.motivo);
+        sujar(db, 'Fornecedores'); extra.msg = ok ? fc.nome + ' credenciado.' : 'Credenciamento recusado.';
+        break;
+      }
+      case 'registrarPdf': {
+        var rp = getReq(db, p.id);
+        if (rp.solicitanteId !== u.id && Number(u.nivel) < 2) erro('Sem permissão.');
+        rp.pdfUrl = txt(p.pdfUrl); rp.pdfId = txt(p.pdfId); sujar(db, 'Solicitacoes');
+        break;
+      }
+      case 'assinaturas': {   // imagens das assinaturas (para montar o PDF)
+        var mapa = {};
+        (p.ids || []).forEach(function (id) { var x = porId(db.Usuarios, id); if (x && x.assinatura) mapa[id] = x.assinatura; });
+        extra.assinaturas = mapa;
+        break;
+      }
+      case 'gerarLinkAssinatura': {
+        var ua2 = porId(db.Usuarios, p.id || u.id); if (!ua2) erro('Usuário não encontrado.');
+        if (ua2.id !== u.id) exigir(u, 3);
+        ua2.tokenAssinatura = ctx.uuid().replace(/-/g, '') + ctx.uuid().replace(/-/g, '').slice(0, 8);
+        sujar(db, 'Usuarios'); extra.token = ua2.tokenAssinatura; extra.nome = ua2.nome;
+        break;
+      }
+      case 'salvarMinhaAssinatura': u.assinatura = validarAssinatura(p.png); u.tokenAssinatura = ''; sujar(db, 'Usuarios'); extra.msg = 'Assinatura salva.'; break;
       case 'toggleFornecedor': { exigir(u, 2); var tf = porId(db.Fornecedores, p.id); if (tf) { tf.ativo = !(tf.ativo !== false); sujar(db, 'Fornecedores'); } break; }
 
       case 'saveUser': {
@@ -456,6 +494,26 @@ var CVEngine = (function () {
     return null;
   }
 
+  // ---------- assinatura por link (sem login) ----------
+  function validarAssinatura(png) {
+    png = txt(png);
+    if (!/^data:image\/png;base64,/.test(png)) erro('Assinatura inválida.');
+    if (png.length > 45000) erro('A assinatura ficou muito grande. Clique em "Limpar" e assine novamente.');
+    return png;
+  }
+  function usuarioPorToken(db, token) {
+    token = txt(token);
+    var x = token ? db.Usuarios.filter(function (y) { return y.tokenAssinatura === token; })[0] : null;
+    if (!x) erro('Link de assinatura inválido ou já utilizado. Peça um novo link ao gerente.');
+    return x;
+  }
+  function assinaturaInfo(db, token) { var x = usuarioPorToken(db, token); return { nome: x.nome, email: x.email, temAssinatura: !!x.assinatura }; }
+  function salvarAssinaturaToken(db, token, png) {
+    var x = usuarioPorToken(db, token);
+    x.assinatura = validarAssinatura(png); x.tokenAssinatura = ''; sujar(db, 'Usuarios');
+    return { nome: x.nome };
+  }
+
   // ---------- primeiro acesso (sem login) ----------
   function verificarEmail(db, email) {
     var e = norm(email);
@@ -520,7 +578,7 @@ var CVEngine = (function () {
       { id: ctx.uuid(), nome: 'Diego Rocha', email: 'gerente@cheiroverde.com.br', senhaHash: senha, nivel: 3, filial: filiais[0], ativo: true, criadoEm: em }
     ];
     db.Listas = linhasListasPadrao();
-    FORNECEDORES.forEach(function (f) { db.Fornecedores.push({ id: ctx.uuid(), nome: f[0], cnpj: '', contato: '', telefone: '', email: '', cidade: f[1], categorias: f[2], ativo: true, criadoEm: em }); });
+    FORNECEDORES.forEach(function (f) { db.Fornecedores.push({ id: ctx.uuid(), nome: f[0], cnpj: '', contato: '', telefone: '', email: '', cidade: f[1], categorias: f[2], ativo: true, criadoEm: em, statusCred: 'aprovado', cadastradoPor: 'Sistema', credAnalisadoPor: 'Sistema', credAnalisadoEm: em, credObs: '' }); });
     CATALOGO.forEach(function (c) { db.Itens.push({ id: ctx.uuid(), codigo: 'IT-' + pad(proximo(db, 'seq_item'), 4), descricao: c[0], unidade: c[1], categoria: c[2], fornecedorPreferido: c[3], ultimoPreco: '', ultimaCompra: '', ativo: true, criadoEm: em }); });
     if (opcoes.demo) {
       demo(db, ctx);
@@ -545,7 +603,7 @@ var CVEngine = (function () {
       var itens = [{ itemId: item.id, descricao: c[0], unidade: c[1], qtd: Math.round(entre(c[6], c[7])), valorUnit: r2(entre(c[4], c[5])) }];
       var em = new Date(ms).toISOString();
       var r = criar(db, criador, {
-        filial: criador.filial, centroCusto: CC_POR_CAT[c[2]], categoria: c[2], fornecedor: c[3],
+        filial: criador.filial, centroCusto: CC_POR_CAT[c[2]], categoria: c[2], fornecedor: c[3], condicaoPagamento: ['PIX', 'Boleto 28 dias', 'Boleto 30/60/90 dias'][Math.floor(rnd() * 3)], cidade: String(criador.filial).replace(/ \(.*\)/, '') + '/SP',
         urgencia: '', dataNecessidade: '',
         justificativa: 'Reposição para continuidade da operação.', itens: itens
       }, ctx, em);
@@ -564,7 +622,7 @@ var CVEngine = (function () {
   return {
     TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA,
     linhasListasPadrao: linhasListasPadrao, listas: listas, cnpjValido: cnpjValido, cpfValido: cpfValido, digitos: digitos, formatarDoc: formatarDoc, normalizarCnpj: normalizarCnpj,
-    novoDb: novoDb, seed: seed, login: login, verificarEmail: verificarEmail, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
+    novoDb: novoDb, seed: seed, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, norm: norm, r2: r2
   };
 })();
