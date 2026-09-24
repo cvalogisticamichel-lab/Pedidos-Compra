@@ -100,6 +100,9 @@
   }
   window.addEventListener('hashchange', () => render());
 
+  // Site x servidor: avisa se o Apps Script publicado for mais antigo que o exigido
+  const numVer = v => String(v || '0').split('.').map(Number).reduce((a, n) => a * 1000 + (n || 0), 0);
+  const apiDesatualizada = () => S.modo === 'google' && !!C.apiMinima && S.extra().modo === 'google' && numVer(S.extra().versaoApi) < numVer(C.apiMinima);
   function pendentesParaMim(u) { return S.listRequests().filter(r => S.podeAprovar(u, r)); }
   // Financeiro (nível 5): somente consulta
   const FIN = u => Number(u && u.nivel) === 5;
@@ -285,7 +288,7 @@
         <nav class="nav">
           ${disp.map(x => `${x.grupo ? `<div class="nav-grupo">${esc(x.grupo)}</div>` : ''}<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}${x.id === 'acessos' && nAcessos ? `<span class="badge">${nAcessos}</span>` : ''}${x.id === 'credenciamento' && nForn ? `<span class="badge">${nForn}</span>` : ''}</a>`).join('')}
         </nav>
-        <div class="foot">${esc(C.sistema)} v${esc(C.versao)}<br>${S.modo === 'google' ? '● Conectado ao Google' : '○ Modo demonstração'}</div>
+        <div class="foot">${esc(C.sistema)} v${esc(C.versao)}<br>${S.modo === 'google' ? '● Conectado ao Google' + (S.extra().versaoApi ? ' · API v' + esc(S.extra().versaoApi) : ' · API antiga') : '○ Modo demonstração'}</div>
       </aside>
       <div class="main">
         <header class="topbar">
@@ -299,6 +302,7 @@
             <button class="btn btn-ghost btn-sm" id="btnSair" title="Sair">${icon('out', 18)}</button>
           </div>
         </header>
+        ${apiDesatualizada() ? `<div class="aviso-api">${icon('bell', 18)}<div><b>O Apps Script (servidor) está desatualizado${S.extra().versaoApi ? ' — versão ' + esc(S.extra().versaoApi) : ''}.</b> Este site precisa da versão ${esc(C.apiMinima)} ou maior. No Apps Script, cole o Código.gs e o Engine.gs novos e faça <b>Implantar &gt; Gerenciar implantações &gt; lápis &gt; Nova versão</b>. Até lá, placas e campos novos não funcionam.</div></div>` : ''}
         <main class="content" id="view"></main>
       </div>
     </div>`;

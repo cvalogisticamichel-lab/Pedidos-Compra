@@ -442,3 +442,5 @@ fieldset.fs-limpo { border: 0; padding: 0; margin-bottom: 0; }
 .tetos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
 .tetos .small { display: block; margin-top: 2px; }
 .itens-sub { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--cinza, #7b8a81); }
+.aviso-api { display: flex; gap: 10px; align-items: flex-start; margin: 12px 24px 0; padding: 12px 14px; border-radius: 10px; background: #fdecea; border: 1px solid #f1b0a8; color: #7a1f14; font-size: 14px; line-height: 1.45; }
+.aviso-api svg { flex: none; margin-top: 2px; }
