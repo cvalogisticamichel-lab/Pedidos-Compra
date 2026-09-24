@@ -31,6 +31,7 @@
       if (this.db) return this.db;
       try { this.db = JSON.parse(ls.get(K_DB)); } catch (e) { this.db = null; }
       if (!this.db || !this.db.Usuarios) { this.db = E.seed(this.ctx, { demo: true, filiais: C.filiais }); this.save(); }
+      if (!this.db.Listas) { this.db.Listas = E.linhasListasPadrao(); this.save(); } // dados salvos na versão anterior
       return this.db;
     },
     save() {
@@ -149,6 +150,25 @@
     listRequests: () => st.requests.slice(),
     getRequest: id => st.requests.find(r => r.id === id) || null,
     listUsers: () => st.users.slice(),
+    listas: () => (st && st.listas) || { filial: C.filiais, centroCusto: C.centrosCusto, categoria: C.categorias, unidade: C.unidadesMedida },
+    digitos: E.digitos, cnpjValido: E.cnpjValido, cpfValido: E.cpfValido,
+    /** Consulta CNPJ: BrasilAPI direto do navegador; se falhar, via servidor Google (BrasilAPI/ReceitaWS). */
+    async consultaCnpj(cnpj) {
+      const d = E.digitos(cnpj);
+      if (!E.cnpjValido(d)) throw new Error('CNPJ inválido.');
+      try {
+        const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + d, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (r.status === 404) { const e = new Error('CNPJ não encontrado na Receita Federal.'); e.final = true; throw e; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return E.normalizarCnpj(await r.json());
+      } catch (e) {
+        if (e.final) throw e;
+        if (MODO === 'google' && token) { const j = await remoto('consultaCnpj', { token, cnpj: d }); return j.dados; }
+        throw new Error('Não foi possível consultar a Receita agora. Preencha os dados manualmente.');
+      }
+    },
     catalogo: () => st.catalogo.slice(),
     fornecedores: () => st.fornecedores.slice(),
     precos: () => st.precos.slice(),
