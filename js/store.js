@@ -94,12 +94,36 @@
     return j;
   }
 
+  // ---------- cópia local do último estado (abre o site na hora) ----------
+  const K_SNAP = 'cv_compras_snap_' + MODO;
+  let snapTimer = null;
+  function guardarSnapshot() {
+    if (MODO !== 'google' || !st) return;
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => { try { const t = JSON.stringify(st); if (t.length < 2.5e6) ls.set(K_SNAP, t); } catch (e) { /* sem espaço */ } }, 300);
+  }
+
   async function call(action, p) {
     p = Object.assign({}, p || {}, { token });
     const j = MODO === 'google' ? await remoto(action, p) : await local.call(action, p);
-    if (j.state) st = j.state;
+    if (j.state) { st = j.state; guardarSnapshot(); }
     return j;
   }
+
+  /** Fotos grandes de orçamento são reduzidas antes do envio (bem mais rápido) */
+  async function otimizarArquivo(file) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 700 * 1024 || !window.createImageBitmap) return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const esc = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas'); c.width = Math.round(bmp.width * esc); c.height = Math.round(bmp.height * esc);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.82));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+    } catch (e) { return file; }
+  }
+  const cacheAss = {};
 
   function lerArquivo(file) {
     return new Promise((ok, falha) => {
@@ -132,9 +156,14 @@
     async init() {
       token = ls.get(K_TOKEN);
       if (!token) return null;
+      // abre na hora com a última cópia; os dados atualizados chegam em seguida
+      if (MODO === 'google') {
+        try { const snap = JSON.parse(ls.get(K_SNAP) || 'null'); if (snap && snap.user) { st = snap; this.atualizando = call('state'); return st.user; } } catch (e) { /* ignora */ }
+      }
       try { await call('state'); return st.user; }
       catch (e) { if (e.sessao === false) { token = null; ls.del(K_TOKEN); return null; } throw e; }
     },
+    atualizando: null,
     async login(email, senha) {
       const j = await call('login', { email, senha });
       token = j.token; ls.set(K_TOKEN, token);
@@ -142,7 +171,8 @@
     },
     logout() {
       if (MODO === 'google' && token) remoto('logout', { token }).catch(() => {});
-      token = null; st = null; ls.del(K_TOKEN);
+      token = null; st = null; ls.del(K_TOKEN); ls.del(K_SNAP);
+      Object.keys(cacheAss).forEach(k => delete cacheAss[k]);
     },
     user: () => (st ? st.user : null),
     superAdmin: () => !!(st && st.superAdmin),
@@ -150,7 +180,16 @@
     temAssinatura: () => !!(st && st.temAssinatura),
     async assinaturaInfo(token) { const j = await call('assinaturaInfo', { tk: token }); return j.dados; },
     async salvarAssinatura(token, png) { const j = await call('salvarAssinatura', { tk: token, png }); return j.dados; },
-    async assinaturas(ids) { const j = await call('assinaturas', { ids }); return (j.state && j.state.extra && j.state.extra.assinaturas) || {}; },
+    async assinaturas(ids) {
+      const faltam = ids.filter(id => !(id in cacheAss));
+      if (faltam.length) {
+        const j = await call('assinaturas', { ids: faltam });
+        const m = (j.state && j.state.extra && j.state.extra.assinaturas) || {};
+        faltam.forEach(id => { cacheAss[id] = m[id] || null; });
+      }
+      const out = {}; ids.forEach(id => { if (cacheAss[id]) out[id] = cacheAss[id]; }); return out;
+    },
+    esquecerAssinaturas() { Object.keys(cacheAss).forEach(k => delete cacheAss[k]); },
     /** Cidade de quem está solicitando (geolocalização do navegador) */
     cidadeAtual() {
       if (this._cidade) return this._cidade;
@@ -194,7 +233,8 @@
     async criarSolicitacao(data, orcs) {
       const MB = 1024 * 1024; let total = 0;
       const lista = [];
-      for (const o of orcs) {
+      for (const o0 of orcs) {
+        const o = Object.assign({}, o0, { file: await otimizarArquivo(o0.file) });
         if (o.file.size > 10 * MB) throw new Error(`O arquivo "${o.file.name}" passa de 10 MB.`);
         total += o.file.size;
         lista.push({ fornecedor: o.fornecedor, valor: o.valor, nome: o.file.name, mime: o.file.type, base64: await lerArquivo(o.file) });
@@ -205,6 +245,7 @@
     minOrcamentos: () => (st && st.minOrcamentos != null ? Number(st.minOrcamentos) : 3),
     async upload(solicitacaoId, file, fornecedor, valor) {
       if (!file) throw new Error('Selecione o arquivo do orçamento.');
+      file = await otimizarArquivo(file);
       const base64 = await lerArquivo(file);
       return call('uploadOrcamento', { solicitacaoId, fornecedor, valor, nome: file.name, mime: file.type, base64 });
     },

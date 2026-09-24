@@ -158,6 +158,7 @@
         esconderCarregando();
         if (!location.hash || location.hash === '#/') location.hash = '#/inicio';
         render();
+        setTimeout(() => { if (window.CVPdf) window.CVPdf.carregarLibs().catch(() => {}); }, 2500);
       } catch (err) {
         esconderCarregando();
         document.getElementById('erro').textContent = err.message;
@@ -288,7 +289,7 @@
       </div>
     </div>`;
     document.getElementById('btnSair').onclick = () => { S.logout(); location.hash = ''; render(); };
-    document.getElementById('btnSync').onclick = e => executar(e.currentTarget, () => S.refresh(), 'Dados atualizados.');
+    document.getElementById('btnSync').onclick = e => { S.esquecerAssinaturas(); executar(e.currentTarget, () => S.refresh(), 'Dados atualizados.'); };
     document.getElementById('btnPerfil').onclick = abrirPerfil;
 
     const view = document.getElementById('view');
@@ -340,7 +341,7 @@
       const pad = padAssinatura(bg.querySelector('#padPerfil'));
       bg.querySelector('#salvarAss').onclick = e => {
         if (pad.vazio()) { toast('Faça sua assinatura no quadro antes de salvar.', true); return; }
-        executar(e.currentTarget, () => S.act('salvarMinhaAssinatura', { png: pad.exportar() }), 'Assinatura salva.', () => fechar());
+        executar(e.currentTarget, () => S.act('salvarMinhaAssinatura', { png: pad.exportar() }), 'Assinatura salva.', () => { S.esquecerAssinaturas(); fechar(); });
       };
       bg.querySelector('#linkCel').onclick = e => executar(e.currentTarget, () => S.act('gerarLinkAssinatura', {}), null, j => { fechar(); mostrarLinkAssinatura(j.state.extra.nome, j.state.extra.token); });
       const f = bg.querySelector('#fSenha');
@@ -1547,7 +1548,15 @@
 
   // ========== INÍCIO DO APP ==========
   renderCarregando(S.modo === 'google' ? 'Conectando à base Google…' : 'Carregando…');
+  const podeRedesenhar = () => !document.querySelector('.modal-bg, .loading-overlay') && !document.getElementById('fNova') && !document.getElementById('fLogin');
   S.init()
-    .then(() => render())
+    .then(() => {
+      render();
+      // dados atualizados chegando depois da cópia local
+      if (S.atualizando) S.atualizando.then(() => { if (podeRedesenhar()) render(); }).catch(e => { if (e.sessao === false) { S.logout(); renderLogin(e.message); } });
+      // deixa o gerador de PDF pronto enquanto o usuário navega
+      const pre = () => { if (window.CVPdf && S.user()) window.CVPdf.carregarLibs().catch(() => {}); };
+      (window.requestIdleCallback || (f => setTimeout(f, 2500)))(pre);
+    })
     .catch(e => renderLogin(e.message));
 })();
