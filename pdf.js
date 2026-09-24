@@ -2,7 +2,7 @@
    PDF DO PEDIDO DE COMPRA — Cheiro Verde Ambiental
    Gera o documento (A4) com logo, dados do fornecedor, itens,
    condição de pagamento, cidade, data da aprovação e assinaturas.
-   Bibliotecas (jsPDF + AutoTable) ficam em js/vendor e só são
+   Bibliotecas (jsPDF + AutoTable) ficam na raiz do site e só são
    carregadas quando um PDF é gerado.
    ========================================================== */
 window.CVPdf = (function () {
@@ -18,7 +18,7 @@ window.CVPdf = (function () {
   }
   async function carregarLibs() {
     if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) return;
-    if (!libs) libs = carregarScript('js/vendor/jspdf.umd.min.js').then(() => carregarScript('js/vendor/jspdf.plugin.autotable.min.js'));
+    if (!libs) libs = carregarScript('jspdf.umd.min.js').then(() => carregarScript('jspdf.plugin.autotable.min.js'));
     await libs;
   }
   /** Converte a logo vetorial em PNG de alta resolução */

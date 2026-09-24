@@ -1637,7 +1637,7 @@
             ${ex.planilhaUrl ? `<a class="btn btn-primary" href="${esc(ex.planilhaUrl)}" target="_blank" rel="noopener">Abrir planilha</a>` : ''}
             ${ex.pastaUrl ? `<a class="btn btn-ghost" href="${esc(ex.pastaUrl)}" target="_blank" rel="noopener">Abrir pasta de orçamentos</a>` : ''}
           </div>`
-        : `<p style="margin:0">Os dados estão salvos apenas neste navegador. Para usar com toda a equipe, siga o <b>GUIA-GOOGLE.txt</b>: crie a planilha, instale o script e cole a URL em <code>js/config.js</code> (campo <code>apiUrl</code>).</p>`}
+        : `<p style="margin:0">Os dados estão salvos apenas neste navegador. Para usar com toda a equipe, siga o <b>GUIA-GOOGLE.txt</b>: crie a planilha, instale o script e cole a URL em <code>config.js</code> (campo <code>apiUrl</code>).</p>`}
       </div>
       <div class="card">
         <div class="card-head"><h2>Listas de validação</h2><span class="small muted">${S.modo === 'google' ? 'gravadas na aba "Listas" da planilha' : 'base de dados das listas'}</span></div>

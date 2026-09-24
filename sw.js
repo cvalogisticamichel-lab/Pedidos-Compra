@@ -3,14 +3,14 @@
      na hora (cache-first). Uma versão nova tem outro ?v=, então nunca fica velho.
    - Página principal: busca na rede primeiro (pega atualizações), cache se offline.
    - Chamadas ao Google (API) nunca passam pelo cache. */
-const CACHE = 'cv-compras-v2.9.0';
-const V = '?v=2.9.0';
+const CACHE = 'cv-compras-v2.9.1';
+const V = '?v=2.9.1';
 const ARQUIVOS = [
   './', './index.html', './manifest.webmanifest',
-  './css/style.css' + V, './js/marca.js' + V, './js/config.js' + V, './js/engine.js' + V,
-  './js/store.js' + V, './js/pdf.js' + V, './js/app.js' + V,
-  './js/vendor/jspdf.umd.min.js', './js/vendor/jspdf.plugin.autotable.min.js',
-  './assets/logo.svg', './assets/logo-branco.svg', './assets/icon.svg', './assets/icon-redondo.svg', './assets/icon-192.png', './assets/icon-512.png'
+  './style.css' + V, './marca.js' + V, './config.js' + V, './engine.js' + V,
+  './store.js' + V, './pdf.js' + V, './app.js' + V,
+  './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js',
+  './logo.svg', './logo-branco.svg', './icon.svg', './icon-redondo.svg', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
@@ -23,7 +23,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;                      // Google, fontes, APIs: direto na rede
-  const estatico = url.search.includes('v=') || /\/(assets|vendor)\//.test(url.pathname);
+  const estatico = url.search.includes('v=') || /\.(png|svg|gif|min\.js)$/.test(url.pathname);
   if (estatico) {
     e.respondWith(caches.match(req).then(r => r || fetch(req).then(res => {
       if (res.ok) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(req, cp)); }
