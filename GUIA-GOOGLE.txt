@@ -1,0 +1,200 @@
+=====================================================================
+  PEDIDOS DE COMPRA — CHEIRO VERDE AMBIENTAL
+  GUIA DE INTEGRAÇÃO COM GOOGLE PLANILHAS + GOOGLE DRIVE
+=====================================================================
+
+O QUE ESTA INTEGRAÇÃO FAZ
+-------------------------
+- Uma Planilha Google vira o banco de dados do sistema. Ela terá as abas:
+    Painel             -> resumos automáticos para os gestores
+    Solicitacoes       -> um pedido por linha
+    Itens_Solicitacao  -> itens de cada pedido
+    Historico          -> quem fez o quê e quando
+    Orcamentos         -> orçamentos anexados (com link do arquivo no Drive)
+    Itens              -> cadastro de itens (código IT-0001, último preço...)
+    Fornecedores       -> cadastro de fornecedores
+    Historico_Precos   -> todo preço pago, gravado automaticamente
+                          quando um pedido é marcado como "Comprado"
+    Usuarios           -> usuários e níveis (senha guardada criptografada)
+    Config             -> limites das alçadas e numeração
+- Uma pasta "CV Compras - Orçamentos" no Drive guarda os arquivos
+  (PDF, foto, Word, Excel), com uma subpasta por pedido (ex.: PC-2026-0001).
+- Todos os usuários passam a ver os mesmos dados, em qualquer
+  computador ou celular.
+
+Tempo estimado: 15 minutos. Não precisa instalar nada.
+
+DICA: use uma conta Google DA EMPRESA (ex.: compras@...), e não uma
+conta pessoal, porque a planilha e os orçamentos ficam nessa conta.
+
+
+=====================================================================
+PARTE 1 — CRIAR A PLANILHA E INSTALAR O SCRIPT
+=====================================================================
+
+1. Acesse drive.google.com com a conta da empresa.
+2. Clique em "+ Novo" > "Planilhas Google" > "Planilha em branco".
+3. Dê o nome: CV Compras - Base de Dados
+4. No menu da planilha, clique em: Extensões > Apps Script
+   (abre uma nova aba com o editor de código).
+5. No alto, clique em "Projeto sem título" e renomeie para: CV Compras API
+
+6. Na lateral esquerda existe o arquivo "Código.gs".
+   - Clique nele, apague TODO o conteúdo.
+   - Abra no seu computador o arquivo:  google-apps-script/Codigo.gs
+     (pode abrir com o Bloco de Notas), copie tudo e cole no editor.
+
+7. Clique no "+" ao lado de "Arquivos" > "Script".
+   - Dê o nome: Engine   (o editor completa para Engine.gs)
+   - Apague o conteúdo que vier nele.
+   - Abra no seu computador:  google-apps-script/Engine.gs
+     copie tudo e cole.
+
+8. Clique no ícone de disquete (Salvar) ou aperte Ctrl+S.
+
+9. No topo do editor há uma caixinha com o nome de uma função.
+   Selecione:  setup   e clique em "Executar".
+
+10. O Google vai pedir autorização (isso é normal para scripts próprios):
+    - "Revisar permissões" > escolha a conta da empresa
+    - Se aparecer "O Google não verificou este app":
+      clique em "Avançado" > "Acessar CV Compras API (não seguro)"
+    - Clique em "Permitir".
+    O script pede acesso à planilha e ao Drive porque grava os dados
+    e salva os orçamentos.
+
+11. Aguarde aparecer "Execução concluída" no registro.
+    Volte na aba da planilha e atualize a página (F5): as abas foram
+    criadas, e surgiu o menu "CV Compras".
+    No Drive, ao lado da planilha, foi criada a pasta
+    "CV Compras - Orçamentos".
+
+
+=====================================================================
+PARTE 2 — PUBLICAR A API (APP DA WEB)
+=====================================================================
+
+1. No editor do Apps Script, clique no botão azul "Implantar" >
+   "Nova implantação".
+2. Clique na engrenagem ao lado de "Selecionar tipo" > "App da Web".
+3. Preencha:
+     Descrição ............ v1
+     Executar como ........ Eu (seu e-mail)
+     Quem pode acessar .... Qualquer pessoa
+   (O "Qualquer pessoa" é necessário para o site conseguir conversar
+    com a planilha. O acesso aos dados continua protegido pelo login
+    e senha do próprio sistema.)
+4. Clique em "Implantar" e copie o "URL do app da Web".
+   Ele se parece com:
+   https://script.google.com/macros/s/AKfycb............/exec
+
+5. TESTE: cole essa URL no navegador. Deve aparecer algo como:
+   {"ok":true,"app":"CV Compras API", ...}
+
+
+=====================================================================
+PARTE 3 — CONECTAR O SITE (GITHUB)
+=====================================================================
+
+1. Envie para o GitHub os arquivos desta nova versão (substituindo os
+   antigos). IMPORTANTE: envie o CONTEÚDO da pasta, para que o
+   index.html fique na raiz do repositório:
+     index.html, sw.js, manifest.webmanifest,
+     pastas css, js, assets, google-apps-script
+
+2. No GitHub, abra o arquivo  js/config.js  > clique no lápis (Editar).
+   Encontre a linha:
+       apiUrl: '',
+   e cole a sua URL entre as aspas:
+       apiUrl: 'https://script.google.com/macros/s/AKfycb...../exec',
+   Clique em "Commit changes".
+
+3. Aguarde 1 a 2 minutos, abra o site e aperte Ctrl+F5.
+   No rodapé do menu lateral deve aparecer: "● Conectado ao Google".
+
+4. PRIMEIRO ACESSO:
+   - Entre com  gerente@cheiroverde.com.br  /  1234
+   - Clique nas suas iniciais (canto superior direito) e TROQUE A SENHA.
+   - Vá em Configurações > Usuários: cadastre as pessoas reais
+     (nome, e-mail, nível, filial e senha inicial).
+   - Desative (ou edite) os usuários de demonstração.
+   - Ajuste os limites das alçadas, se necessário.
+
+
+=====================================================================
+COMO USAR NO DIA A DIA
+=====================================================================
+
+- ORÇAMENTOS: abra o pedido > seção "Orçamentos" > informe fornecedor,
+  valor e escolha o arquivo > "Anexar orçamento no Drive".
+  O sistema destaca o orçamento de menor valor.
+- ITENS: ao digitar a descrição na nova solicitação, o sistema sugere
+  itens do cadastro e preenche o último preço pago. Se o preço digitado
+  estiver mais de 10% acima da média, aparece um alerta.
+- HISTÓRICO DE PREÇOS: é gravado sozinho quando o pedido é marcado
+  como "Comprado" (com o fornecedor final). Itens e fornecedores novos
+  são cadastrados automaticamente nesse momento.
+- CADASTROS: menu "Itens e fornecedores" (todos podem cadastrar;
+  Supervisor e Gerente podem desativar).
+- PAINEL: a aba "Painel" da planilha mostra totais por status, centro
+  de custo, mês, fornecedores e pendentes. Pode ser ligada ao
+  Looker Studio (lookerstudio.google.com > Criar > Fonte de dados >
+  Planilhas Google) para montar o dashboard de gestores.
+
+
+=====================================================================
+QUANDO ALTERAR O CÓDIGO DO SCRIPT
+=====================================================================
+
+Depois de colar uma versão nova do Codigo.gs ou Engine.gs:
+  Implantar > Gerenciar implantações > lápis (editar) >
+  Versão: "Nova versão" > Implantar.
+A URL continua a mesma — não precisa mexer no site.
+
+Se alterar as regras em js/engine.js, copie o mesmo conteúdo para o
+Engine.gs do Apps Script (os dois precisam ser iguais).
+
+
+=====================================================================
+CUIDADOS
+=====================================================================
+
+- Não renomeie as abas e não mude a ordem das colunas.
+- Pode corrigir dados direto na planilha (ex.: nome de fornecedor),
+  de preferência quando ninguém estiver usando o sistema.
+- Não apague a aba Config (ela guarda os limites e a numeração).
+- Arquivos de orçamento ficam visíveis para quem tiver o link.
+  Para restringir, no Codigo.gs mude:
+      const COMPARTILHAR_ARQUIVOS_COM_LINK = false;
+  (aí só quem tem acesso à pasta no Drive consegue abrir).
+- Tamanho máximo por arquivo: 10 MB (ajustável no Codigo.gs).
+- Os dados do modo demonstração NÃO são levados para a planilha
+  (eles ficavam só no navegador).
+
+
+=====================================================================
+PROBLEMAS COMUNS
+=====================================================================
+
+"Resposta inválida do servidor"
+  -> A implantação não está com "Quem pode acessar: Qualquer pessoa",
+     ou a URL copiada está errada (precisa terminar em /exec).
+
+"Sessão expirada"
+  -> Normal após 6 horas. Entre novamente.
+
+"Aba X não encontrada"
+  -> Na planilha: menu CV Compras > "1) Configurar planilha".
+
+Alterei o script e nada mudou
+  -> Faltou publicar "Nova versão" (veja acima).
+
+A opção "Qualquer pessoa" não aparece
+  -> Contas Google Workspace podem ter isso bloqueado pelo
+     administrador. Peça para liberar "Apps Script: publicar app da
+     Web para qualquer pessoa" ou use outra conta da empresa.
+
+Ficou lento
+  -> O Apps Script responde em 1 a 3 segundos por ação; é normal.
+     Com milhares de pedidos, considere arquivar os antigos em outra
+     planilha.
