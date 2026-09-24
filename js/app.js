@@ -148,6 +148,7 @@
     const u = S.user();
     if (!u) return renderLogin();
     document.querySelectorAll('.modal-bg').forEach(m => m.remove());
+    acFechar();
     const rota = rotaAtual();
     const disp = ROTAS.filter(r => u.nivel >= r.nivel);
     const r = disp.find(x => x.id === rota.id) || disp[0];
@@ -264,13 +265,13 @@
   function tabela(lista, extra) {
     if (!lista.length) return '<div class="empty">Nenhuma solicitação encontrada.</div>';
     return `<div class="table-wrap"><table>
-      <thead><tr><th>Nº</th><th>Data</th><th class="hide-sm">Solicitante</th><th class="hide-sm">Centro de custo</th><th class="hide-sm">Urgência</th><th class="r">Total</th><th>Status</th>${extra ? '<th></th>' : ''}</tr></thead>
+      <thead><tr><th>Nº</th><th>Data</th><th class="hide-sm">Solicitante</th><th class="hide-sm">Centro de custo</th><th class="hide-sm">Categoria</th><th class="r">Total</th><th>Status</th>${extra ? '<th></th>' : ''}</tr></thead>
       <tbody>${lista.map(r => `<tr class="click" data-id="${r.id}">
         <td><b>${esc(r.numero)}</b>${r.orcamentos && r.orcamentos.length ? ` <span class="clip" title="${r.orcamentos.length} orçamento(s)">${icon('clip', 14)}${r.orcamentos.length}</span>` : ''}<div class="small muted">${esc(r.itens[0] ? r.itens[0].descricao : '')}${r.itens.length > 1 ? ' +' + (r.itens.length - 1) : ''}</div></td>
         <td class="num">${data(r.criadoEm)}</td>
         <td class="hide-sm">${esc(r.solicitanteNome)}</td>
         <td class="hide-sm">${esc(r.centroCusto)}</td>
-        <td class="hide-sm urg-${esc(r.urgencia)}">${esc(r.urgencia)}</td>
+        <td class="hide-sm">${esc(r.categoria)}</td>
         <td class="r num"><b>${brl(r.total)}</b></td>
         <td>${statusTag(r.status)}${r.status === 'pendente' ? `<div class="small muted">→ ${esc(S.nomeNivel(r.nivelNecessario))}</div>` : ''}</td>
         ${extra ? `<td>${extra(r)}</td>` : ''}
@@ -287,31 +288,120 @@
     <datalist id="dlItens">${S.catalogo().filter(ativo).map(i => `<option value="${esc(i.descricao)}">${esc(i.codigo)}${i.ultimoPreco !== '' ? ' · ' + brl(i.ultimoPreco) : ''}</option>`).join('')}</datalist>
     <datalist id="dlForn">${S.fornecedores().filter(ativo).map(f => `<option value="${esc(f.nome)}">${esc(f.cidade || '')}</option>`).join('')}</datalist>`;
 
+  // ---------- autocompletar: lista suspensa ABAIXO do campo (a partir de 3 letras) ----------
+  const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const AC = { box: null, itens: [], idx: -1, input: null, cfg: null };
+  function acBox() {
+    if (AC.box && document.body.contains(AC.box)) return AC.box;
+    AC.box = document.createElement('div');
+    AC.box.className = 'ac-box'; AC.box.setAttribute('role', 'listbox'); AC.box.hidden = true;
+    AC.box.addEventListener('mousedown', e => { const op = e.target.closest('.ac-op'); if (op) { e.preventDefault(); acEscolher(+op.dataset.i); } });
+    document.body.appendChild(AC.box);
+    return AC.box;
+  }
+  function acPosicionar() {
+    if (!AC.box || AC.box.hidden || !AC.input || !document.body.contains(AC.input)) return acFechar();
+    const r = AC.input.getBoundingClientRect(), w = Math.min(Math.max(r.width, 300), innerWidth - 16);
+    AC.box.style.width = w + 'px';
+    AC.box.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    AC.box.style.top = (r.bottom + 4) + 'px';
+  }
+  function acFechar() { if (AC.box) AC.box.hidden = true; AC.idx = -1; }
+  function acAbrir(input, cfg) {
+    const q = input.value.trim();
+    AC.input = input; AC.cfg = cfg;
+    if (semAcento(q).replace(/\s/g, '').length < 3) return acFechar();
+    const res = cfg.buscar(q).slice(0, 8);
+    const exato = res.some(r => semAcento(r.valor) === semAcento(q));
+    AC.itens = res.map(r => Object.assign({ tipo: 'op' }, r));
+    if (!exato && cfg.aoCriar) AC.itens.push({ tipo: 'novo', titulo: cfg.textoCriar(q) });
+    const b = acBox();
+    if (!AC.itens.length) return acFechar();
+    b.innerHTML = (res.length ? '' : '<div class="ac-vazio">Nenhum cadastro encontrado</div>') +
+      AC.itens.map((it, i) => `<div class="ac-op${it.tipo === 'novo' ? ' novo' : ''}" data-i="${i}" role="option"><div class="t">${it.tipo === 'novo' ? icon('plus', 15) + ' ' : ''}${esc(it.titulo)}</div>${it.sub ? `<div class="s">${esc(it.sub)}</div>` : ''}</div>`).join('');
+    b.hidden = false; AC.idx = -1; acPosicionar();
+  }
+  function acEscolher(i) {
+    const it = AC.itens[i], cfg = AC.cfg, input = AC.input;
+    acFechar();
+    if (!it) return;
+    if (it.tipo === 'novo') cfg.aoCriar(input.value.trim());
+    else { input.value = it.valor; cfg.aoEscolher(it.obj, input); }
+  }
+  function autocompletar(input, cfg) {
+    input.setAttribute('autocomplete', 'off'); input.removeAttribute('list');
+    input.addEventListener('input', () => acAbrir(input, cfg));
+    input.addEventListener('focus', () => acAbrir(input, cfg));
+    input.addEventListener('blur', () => setTimeout(() => { if (AC.input === input) acFechar(); }, 150));
+    input.addEventListener('keydown', e => {
+      if (!AC.box || AC.box.hidden || AC.input !== input) return;
+      const n = AC.itens.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        AC.idx = e.key === 'ArrowDown' ? (AC.idx + 1) % n : (AC.idx <= 0 ? n - 1 : AC.idx - 1);
+        AC.box.querySelectorAll('.ac-op').forEach((o, k) => o.classList.toggle('on', k === AC.idx));
+      } else if (e.key === 'Enter' && AC.idx >= 0) { e.preventDefault(); acEscolher(AC.idx); }
+      else if (e.key === 'Escape') acFechar();
+    });
+  }
+  window.addEventListener('scroll', acPosicionar, true);
+  window.addEventListener('resize', acPosicionar);
+
+  const combina = (q, texto) => { const t = semAcento(texto); return semAcento(q).split(' ').every(p => t.includes(p)); };
+  const ordenar = (q, campo) => (a, b) => (semAcento(b[campo]).startsWith(semAcento(q)) - semAcento(a[campo]).startsWith(semAcento(q))) || String(a[campo]).localeCompare(String(b[campo]));
+  function buscarItens(q) {
+    return S.catalogo().filter(ativo).filter(i => combina(q, i.descricao + ' ' + i.codigo)).sort(ordenar(q, 'descricao'))
+      .map(i => ({ titulo: i.descricao, valor: i.descricao, obj: i, sub: `${i.codigo} · ${i.unidade}${i.ultimoPreco !== '' ? ' · último preço ' + brl(i.ultimoPreco) : ''}` }));
+  }
+  function buscarFornecedores(q) {
+    const dig = S.digitos(q);
+    return S.fornecedores().filter(ativo).filter(f => combina(q, [f.nome, f.nomeFantasia, f.cidade].join(' ')) || (dig.length >= 3 && S.digitos(f.cnpj).includes(dig))).sort(ordenar(q, 'nome'))
+      .map(f => ({ titulo: f.nome, valor: f.nome, obj: f, sub: [f.nomeFantasia, f.cnpj, [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).join(' · ') }));
+  }
+  const prefillForn = q => (/^[\d.\/\-\s]+$/.test(q) ? { cnpj: q } : { nome: q });
+  const NOME_LISTA = { filial: 'Filial', centroCusto: 'Centro de custo', categoria: 'Categoria', unidade: 'Unidade' };
+
+  /** Gerente: adiciona um valor novo a uma lista (Filial, Centro de custo...) */
+  function novoValorLista(tipo, aoSalvar) {
+    abrirGaveta(`
+      <div class="card-head" style="margin:0"><div><div class="small muted">Lista de validação</div><h1>Novo(a) ${esc(NOME_LISTA[tipo])}</h1></div>${btnFechar}</div>
+      <form id="fLista" style="margin-top:16px">
+        <div class="field"><label>${esc(NOME_LISTA[tipo])}</label><input name="valor" required></div>
+        <p class="small muted">O valor é gravado na aba "Listas" ${S.modo === 'google' ? 'da planilha ' : ''}e passa a aparecer para todos.</p>
+        <button class="btn btn-primary">Adicionar</button>
+      </form>`, (bg, fechar) => {
+      const f = bg.querySelector('#fLista'); f.valor.focus();
+      f.addEventListener('submit', e => {
+        e.preventDefault();
+        executar(f.querySelector('button'), () => S.act('addLista', { tipo, valor: f.valor.value }), 'Adicionado à lista.', j => { fechar(); aoSalvar(j.state.extra.salvo); });
+      });
+    });
+  }
+
   // ========== NOVA SOLICITAÇÃO ==========
   function vNova(el, u) {
+    const L = S.listas();
     const novoItem = () => ({ itemId: '', descricao: '', qtd: 1, unidade: 'un', valorUnit: '' });
     const itens = [novoItem()];
     const lim = S.limites();
-    const catalogo = S.catalogo();
+    const addOpt = u.nivel >= 3 ? '<option value="__novo__">+ Adicionar novo…</option>' : '';
+    const sel = (tipo, label, valor) => `<div><label>${label} *</label><select name="${tipo}" data-lista="${tipo}" required><option value="">Selecione…</option>${opts(L[tipo], valor)}${addOpt}</select></div>`;
     el.innerHTML = `
       <div class="page-head"><div><h1>Nova solicitação de compra</h1><p>Preencha os dados e os itens. O fluxo de aprovação é definido automaticamente pelo valor total.</p></div></div>
-      ${datalists()}
       <form id="fNova">
         <div class="card">
           <h2 style="margin-bottom:14px">Dados gerais</h2>
-          <div class="grid g3">
-            <div><label>Filial</label><select name="filial">${opts(C.filiais, u.filial)}</select></div>
-            <div><label>Centro de custo *</label><select name="centroCusto" required><option value="">Selecione…</option>${opts(C.centrosCusto)}</select></div>
-            <div><label>Categoria *</label><select name="categoria" required><option value="">Selecione…</option>${opts(C.categorias)}</select></div>
-            <div><label>Fornecedor sugerido</label><input name="fornecedor" list="dlForn" placeholder="Digite ou escolha"></div>
-            <div><label>Urgência</label><select name="urgencia">${opts(C.urgencias, 'Normal')}</select></div>
-            <div><label>Necessário até</label><input type="date" name="dataNecessidade"></div>
+          <div class="grid g2">
+            ${sel('filial', 'Filial', u.filial)}
+            ${sel('centroCusto', 'Centro de custo')}
+            ${sel('categoria', 'Categoria')}
+            <div><label>Fornecedor sugerido</label><input name="fornecedor" placeholder="Digite 3 letras do nome ou o CNPJ"><div id="fornHint" class="campo-hint"></div></div>
           </div>
-          <div class="field" style="margin-top:14px"><label>Justificativa *</label><textarea name="justificativa" required placeholder="Por que esta compra é necessária?"></textarea></div>
+          <div class="field" style="margin-top:14px"><label>Motivo da compra *</label><textarea name="justificativa" required placeholder="Descreva por que esta compra é necessária"></textarea></div>
         </div>
         <div class="card">
           <div class="card-head"><h2>Itens</h2><button type="button" class="btn btn-ghost btn-sm" id="addItem">${icon('plus', 16)} Adicionar item</button></div>
-          <p class="small muted" style="margin:-6px 0 10px">Comece a digitar para escolher do cadastro — o último preço pago é sugerido automaticamente.</p>
+          <p class="small muted" style="margin:-6px 0 10px">Digite ao menos 3 letras da descrição para ver os itens cadastrados. O último preço pago é sugerido automaticamente.</p>
           <div class="table-wrap"><table class="itens-table">
             <thead><tr><th style="width:42%">Descrição</th><th>Qtd</th><th>Unid.</th><th>Valor unit. (R$)</th><th class="r">Subtotal</th><th></th></tr></thead>
             <tbody id="itensBody"></tbody>
@@ -326,23 +416,81 @@
           <button type="submit" class="btn btn-primary" id="btnEnviar">Enviar solicitação</button>
         </div>
       </form>`;
+
+    // --- listas com "+ Adicionar novo…" (Gerente) ---
+    el.querySelectorAll('select[data-lista]').forEach(s => {
+      s.dataset.ant = s.value;
+      s.addEventListener('change', () => {
+        if (s.value !== '__novo__') { s.dataset.ant = s.value; return; }
+        s.value = s.dataset.ant || '';
+        novoValorLista(s.dataset.lista, v => {
+          s.innerHTML = '<option value="">Selecione…</option>' + opts(S.listas()[s.dataset.lista], v) + addOpt;
+          s.value = v; s.dataset.ant = v;
+        });
+      });
+    });
+
+    // --- fornecedor sugerido ---
+    const fIn = el.querySelector('[name=fornecedor]'), fHint = el.querySelector('#fornHint');
+    const acharForn = v => S.fornecedores().find(f => semAcento(f.nome) === semAcento(v));
+    const cadastrarForn = q => formFornecedor(null, { prefill: prefillForn(q), onSaved: f => { fIn.value = f.nome; atualizarFornHint(); } });
+    const atualizarFornHint = () => {
+      const v = fIn.value.trim(), f = acharForn(v);
+      if (f) { fHint.innerHTML = `<span class="ok">✓ Fornecedor cadastrado${f.cnpj ? ' · ' + esc(f.cnpj) : ''}</span>`; return; }
+      if (semAcento(v).length < 3) { fHint.innerHTML = ''; return; }
+      fHint.innerHTML = `<span class="warn">Fornecedor não cadastrado.</span> <button type="button" class="link" id="cadForn">Cadastrar agora</button>`;
+      fHint.querySelector('#cadForn').onclick = () => cadastrarForn(v);
+    };
+    autocompletar(fIn, { buscar: buscarFornecedores, aoEscolher: atualizarFornHint, textoCriar: q => `Cadastrar novo fornecedor "${q}"`, aoCriar: cadastrarForn });
+    fIn.addEventListener('input', atualizarFornHint);
+
+    // --- itens ---
     const body = el.querySelector('#itensBody');
-    const precoInfo = it => {
+    const precoInfo = (it, i) => {
+      if (!it.itemId) {
+        return semAcento(it.descricao).length >= 3 ? `<div class="campo-hint"><span class="warn">Item não cadastrado.</span> <button type="button" class="link" data-cad="${i}">Cadastrar item</button></div>` : '';
+      }
       const s = S.statsPreco(it.itemId, it.descricao);
-      if (!s) return '';
+      if (!s) return '<div class="preco-info">✓ Item cadastrado · sem compras anteriores</div>';
       const v = Number(it.valorUnit) || 0;
       const dif = v && s.media ? (v / s.media - 1) * 100 : 0;
       return `<div class="preco-info ${dif > 10 ? 'alto' : ''}">últ. ${brl(s.ultimo)}${s.ultimoForn ? ' · ' + esc(s.ultimoForn) : ''} · méd. ${brl(s.media)}${dif > 10 ? ` · ▲ ${dif.toFixed(0)}% acima` : ''}</div>`;
     };
+    const linha = i => body.querySelector(`tr[data-i="${i}"]`);
+    const aplicarItem = (i, c) => {
+      const it = itens[i], tr = linha(i);
+      it.itemId = c.id; it.descricao = c.descricao; it.unidade = c.unidade || it.unidade;
+      if (!it.valorUnit && c.ultimoPreco !== '' && c.ultimoPreco != null) it.valorUnit = c.ultimoPreco;
+      if (tr) {
+        tr.querySelector('[data-k=descricao]').value = it.descricao;
+        const un = tr.querySelector('[data-k=unidade]');
+        if (![...un.options].some(o => o.value === it.unidade)) un.insertAdjacentHTML('beforeend', `<option>${esc(it.unidade)}</option>`);
+        un.value = it.unidade;
+        tr.querySelector('[data-k=valorUnit]').value = it.valorUnit;
+      }
+      const cat = el.querySelector('[name=categoria]');
+      if (!cat.value && c.categoria && [...cat.options].some(o => o.value === c.categoria)) { cat.value = c.categoria; cat.dataset.ant = c.categoria; }
+      if (!fIn.value && c.fornecedorPreferido) { fIn.value = c.fornecedorPreferido; atualizarFornHint(); }
+      atualizarTotal();
+      if (tr) tr.querySelector('[data-k=qtd]').focus();
+    };
+    const cadastrarItem = (i, q) => formItem(null, {
+      prefill: { descricao: q, unidade: itens[i].unidade, categoria: el.querySelector('[name=categoria]').value },
+      onSaved: c => aplicarItem(i, c)
+    });
     const pintarItens = () => {
       body.innerHTML = itens.map((it, i) => `<tr data-i="${i}">
-        <td><input data-k="descricao" list="dlItens" value="${esc(it.descricao)}" placeholder="Ex.: Luva nitrílica (caixa c/ 100)" required autocomplete="off"><div class="pinfo">${precoInfo(it)}</div></td>
+        <td><input data-k="descricao" value="${esc(it.descricao)}" placeholder="Digite 3 letras… ex.: luva" required><div class="pinfo">${precoInfo(it, i)}</div></td>
         <td><input data-k="qtd" type="number" min="0.01" step="any" value="${esc(it.qtd)}" required></td>
-        <td><select data-k="unidade">${opts(C.unidadesMedida, it.unidade)}</select></td>
+        <td><select data-k="unidade">${opts(L.unidade.includes(it.unidade) ? L.unidade : L.unidade.concat([it.unidade]), it.unidade)}</select></td>
         <td><input data-k="valorUnit" type="number" min="0" step="0.01" value="${esc(it.valorUnit)}" placeholder="0,00" required></td>
         <td class="r num sub">${brl((+it.qtd || 0) * (+it.valorUnit || 0))}</td>
         <td><button type="button" class="btn btn-danger btn-sm" data-rm="${i}" title="Remover" ${itens.length === 1 ? 'disabled' : ''}>${icon('trash', 16)}</button></td>
       </tr>`).join('');
+      body.querySelectorAll('[data-k=descricao]').forEach(inp => {
+        const i = +inp.closest('tr').dataset.i;
+        autocompletar(inp, { buscar: buscarItens, aoEscolher: c => aplicarItem(i, c), textoCriar: q => `Cadastrar "${q}" como novo item`, aoCriar: q => cadastrarItem(i, q) });
+      });
       atualizarTotal();
     };
     const atualizarTotal = () => {
@@ -350,7 +498,7 @@
       el.querySelector('#vTotal').textContent = brl(total);
       body.querySelectorAll('tr').forEach((tr, i) => {
         tr.querySelector('.sub').textContent = brl((+itens[i].qtd || 0) * (+itens[i].valorUnit || 0));
-        tr.querySelector('.pinfo').innerHTML = precoInfo(itens[i]);
+        tr.querySelector('.pinfo').innerHTML = precoInfo(itens[i], i);
       });
       const h = el.querySelector('#hintAlcada');
       if (!total) { h.className = 'hint ok'; h.textContent = 'Informe os itens para calcular a alçada.'; return; }
@@ -363,23 +511,17 @@
       const it = itens[+tr.dataset.i];
       it[e.target.dataset.k] = e.target.value;
       if (e.target.dataset.k === 'descricao') {
-        const c = catalogo.find(x => S.norm(x.descricao) === S.norm(e.target.value));
+        const c = S.catalogo().find(x => semAcento(x.descricao) === semAcento(e.target.value));
         it.itemId = c ? c.id : '';
-        if (c && e.type === 'change') {
-          it.unidade = c.unidade || it.unidade;
-          tr.querySelector('[data-k=unidade]').value = it.unidade;
-          if (!it.valorUnit && c.ultimoPreco !== '') { it.valorUnit = c.ultimoPreco; tr.querySelector('[data-k=valorUnit]').value = c.ultimoPreco; }
-          const cat = el.querySelector('[name=categoria]');
-          if (!cat.value && c.categoria) cat.value = c.categoria;
-          const forn = el.querySelector('[name=fornecedor]');
-          if (!forn.value && c.fornecedorPreferido) forn.value = c.fornecedorPreferido;
-        }
       }
       atualizarTotal();
     };
     body.addEventListener('input', aoMudar);
     body.addEventListener('change', aoMudar);
-    body.addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { itens.splice(+b.dataset.rm, 1); pintarItens(); } });
+    body.addEventListener('click', e => {
+      const b = e.target.closest('[data-rm]'); if (b) { itens.splice(+b.dataset.rm, 1); pintarItens(); return; }
+      const c = e.target.closest('[data-cad]'); if (c) cadastrarItem(+c.dataset.cad, itens[+c.dataset.cad].descricao.trim());
+    });
     el.querySelector('#addItem').onclick = () => { itens.push(novoItem()); pintarItens(); body.querySelector('tr:last-child input').focus(); };
     pintarItens();
 
@@ -389,8 +531,7 @@
       executar(el.querySelector('#btnEnviar'), () => S.act('createRequest', {
         data: {
           filial: f.filial.value, centroCusto: f.centroCusto.value, categoria: f.categoria.value,
-          fornecedor: f.fornecedor.value, urgencia: f.urgencia.value, dataNecessidade: f.dataNecessidade.value,
-          justificativa: f.justificativa.value, itens
+          fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens
         }
       }), j => {
         const c = j.state.extra.criado;
@@ -413,7 +554,7 @@
         <div class="filters">
           <input type="search" id="fBusca" placeholder="Buscar nº, item, fornecedor, solicitante…">
           <select id="fStatus"><option value="">Todos os status</option>${Object.keys(STATUS).map(s => `<option value="${s}">${STATUS[s]}</option>`).join('')}</select>
-          <select id="fCC"><option value="">Todos os centros de custo</option>${opts(C.centrosCusto)}</select>
+          <select id="fCC"><option value="">Todos os centros de custo</option>${opts(S.listas().centroCusto)}</select>
           ${podeVerTodas ? `<select id="fDono"><option value="">Todas</option><option value="minhas">Somente minhas</option></select>` : ''}
         </div>
         <div id="tab"></div>
@@ -476,12 +617,12 @@
         <div><span>Centro de custo</span>${esc(r.centroCusto)}</div>
         <div><span>Categoria</span>${esc(r.categoria)}</div>
         <div><span>Fornecedor sugerido</span>${esc(r.fornecedor || '—')}</div>
-        <div><span>Urgência</span><b class="urg-${esc(r.urgencia)}">${esc(r.urgencia)}</b></div>
-        <div><span>Necessário até</span>${data(r.dataNecessidade)}</div>
+        ${r.urgencia ? `<div><span>Urgência</span><b class="urg-${esc(r.urgencia)}">${esc(r.urgencia)}</b></div>` : ''}
+        ${r.dataNecessidade ? `<div><span>Necessário até</span>${data(r.dataNecessidade)}</div>` : ''}
         ${r.aprovadorNome ? `<div><span>${r.status === 'reprovado' ? 'Reprovado por' : 'Aprovado por'}</span>${esc(r.aprovadorNome)} (N0${r.nivelAprovador || ''})</div><div><span>Decisão em</span>${dataHora(r.decididoEm)}</div>` : ''}
         ${r.compradoEm ? `<div><span>Comprado de</span>${esc(r.fornecedorFinal || r.fornecedor || '—')}</div><div><span>Comprado em</span>${dataHora(r.compradoEm)}</div>` : ''}
       </div>
-      ${r.justificativa ? `<h3>Justificativa</h3><p style="margin:6px 0 16px">${esc(r.justificativa)}</p>` : ''}
+      ${r.justificativa ? `<h3>Motivo da compra</h3><p style="margin:6px 0 16px">${esc(r.justificativa)}</p>` : ''}
       <h3>Itens</h3>
       <div class="table-wrap"><table><thead><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Unit.</th><th class="r">Subtotal</th></tr></thead>
         <tbody>${r.itens.map(i => { const s = S.statsPreco(i.itemId, i.descricao); return `<tr><td>${esc(i.descricao)}${s && r.status !== 'comprado' ? `<div class="small muted">últ. pago ${brl(s.ultimo)} · méd. ${brl(s.media)}</div>` : ''}</td><td class="r num">${i.qtd} ${esc(i.unidade)}</td><td class="r num">${brl(i.valorUnit)}</td><td class="r num">${brl(i.qtd * i.valorUnit)}</td></tr>`; }).join('')}</tbody>
@@ -563,7 +704,7 @@
     const itens = S.catalogo();
     box.innerHTML = `
       <div class="card">
-        <div class="filters"><input type="search" id="q" placeholder="Buscar código, descrição, categoria…"><select id="qCat"><option value="">Todas as categorias</option>${opts(C.categorias)}</select>
+        <div class="filters"><input type="search" id="q" placeholder="Buscar código, descrição, categoria…"><select id="qCat"><option value="">Todas as categorias</option>${opts(S.listas().categoria)}</select>
           <button class="btn btn-accent" id="novo">${icon('plus', 16)} Novo item</button></div>
         <div id="lista"></div>
       </div>`;
@@ -589,22 +730,28 @@
     pintar();
   }
 
-  function formItem(it) {
+  function formItem(it, o) {
+    o = o || {};
+    const base = it || o.prefill || {};
+    const L = S.listas();
     abrirGaveta(`${datalists()}
       <div class="card-head" style="margin:0"><div><div class="small muted">${it ? esc(it.codigo) : 'Novo cadastro'}</div><h1>${it ? 'Editar item' : 'Novo item'}</h1></div>${btnFechar}</div>
       <form id="fItem" style="margin-top:16px">
-        <div class="field"><label>Descrição *</label><input name="descricao" required value="${esc(it ? it.descricao : '')}"></div>
+        <div class="field"><label>Descrição *</label><input name="descricao" required value="${esc(base.descricao || '')}"></div>
         <div class="grid g2">
-          <div><label>Unidade</label><select name="unidade">${opts(C.unidadesMedida, it ? it.unidade : 'un')}</select></div>
-          <div><label>Categoria</label><select name="categoria"><option value="">—</option>${opts(C.categorias, it ? it.categoria : '')}</select></div>
+          <div><label>Unidade</label><select name="unidade">${opts(L.unidade, base.unidade || 'un')}</select></div>
+          <div><label>Categoria</label><select name="categoria"><option value="">—</option>${opts(L.categoria, base.categoria || '')}</select></div>
         </div>
-        <div class="field" style="margin-top:14px"><label>Fornecedor preferido</label><input name="fornecedorPreferido" list="dlForn" value="${esc(it ? it.fornecedorPreferido : '')}"></div>
+        <div class="field" style="margin-top:14px"><label>Fornecedor preferido</label><input name="fornecedorPreferido" list="dlForn" value="${esc(base.fornecedorPreferido || '')}"></div>
+        ${it ? '' : '<p class="small muted">O código (IT-0000) é gerado automaticamente.</p>'}
         <button class="btn btn-primary">Salvar item</button>
-      </form>`, (bg) => {
+      </form>`, (bg, fechar) => {
       const f = bg.querySelector('#fItem');
+      if (!it) f.descricao.focus();
       f.addEventListener('submit', e => {
         e.preventDefault();
-        executar(f.querySelector('button'), () => S.act('saveItem', { item: { id: it ? it.id : '', descricao: f.descricao.value, unidade: f.unidade.value, categoria: f.categoria.value, fornecedorPreferido: f.fornecedorPreferido.value } }), 'Item salvo.');
+        executar(f.querySelector('button'), () => S.act('saveItem', { item: { id: it ? it.id : '', descricao: f.descricao.value, unidade: f.unidade.value, categoria: f.categoria.value, fornecedorPreferido: f.fornecedorPreferido.value } }),
+          'Item salvo.', o.onSaved ? j => { fechar(); o.onSaved(j.state.extra.salvo); } : undefined);
       });
     });
   }
@@ -640,11 +787,11 @@
       </div>`;
     const pintar = () => {
       const q = box.querySelector('#q').value.trim().toLowerCase();
-      const l = lst.filter(f => !q || [f.nome, f.cnpj, f.cidade, f.categorias, f.contato].join(' ').toLowerCase().includes(q));
+      const l = lst.filter(f => !q || [f.nome, f.nomeFantasia, f.cnpj, S.digitos(f.cnpj), f.cidade, f.categorias, f.contato].join(' ').toLowerCase().includes(q));
       box.querySelector('#lista').innerHTML = l.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Fornecedor</th><th class="hide-sm">Contato</th><th class="hide-sm">Categorias</th>${u.nivel >= 2 ? '<th class="r">Comprado</th>' : ''}<th></th></tr></thead>
         <tbody>${l.map(f => `<tr class="${ativo(f) ? '' : 'inativo'}">
-          <td><b>${esc(f.nome)}</b><div class="small muted">${[f.cnpj, f.cidade].filter(Boolean).map(esc).join(' · ')}${ativo(f) ? '' : ' · inativo'}</div></td>
+          <td><b>${esc(f.nome)}</b>${f.situacao && !/ATIVA/.test(f.situacao) ? ' ' + situacaoTag(f.situacao) : ''}<div class="small muted">${[f.nomeFantasia, f.cnpj, [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).map(esc).join(' · ')}${ativo(f) ? '' : ' · inativo'}</div></td>
           <td class="hide-sm">${esc(f.contato)}<div class="small muted">${[f.telefone, f.email].filter(Boolean).map(esc).join(' · ')}</div></td>
           <td class="hide-sm small">${esc(f.categorias)}</td>
           ${u.nivel >= 2 ? `<td class="r num">${gasto[S.norm(f.nome)] ? brl(gasto[S.norm(f.nome)]) : '—'}</td>` : ''}
@@ -658,28 +805,75 @@
     pintar();
   }
 
-  function formFornecedor(f) {
-    const v = k => esc(f ? f[k] : '');
+  const situacaoTag = s => s ? `<span class="status ${/ATIVA/.test(s) ? 'st-aprovado' : 'st-reprovado'}">Receita: ${esc(s)}</span>` : '';
+
+  function formFornecedor(f, o) {
+    o = o || {};
+    const base = f || o.prefill || {};
+    const v = k => esc(base[k] || '');
     abrirGaveta(`
       <div class="card-head" style="margin:0"><div><div class="small muted">Cadastro</div><h1>${f ? 'Editar fornecedor' : 'Novo fornecedor'}</h1></div>${btnFechar}</div>
       <form id="fForn" style="margin-top:16px">
-        <div class="field"><label>Nome / Razão social *</label><input name="nome" required value="${v('nome')}"></div>
-        <div class="grid g2">
-          <div><label>CNPJ</label><input name="cnpj" value="${v('cnpj')}" placeholder="00.000.000/0000-00"></div>
+        <label>CNPJ / CPF</label>
+        <div class="doc-row">
+          <input name="cnpj" value="${v('cnpj')}" placeholder="00.000.000/0000-00" inputmode="numeric" autocomplete="off">
+          <button type="button" class="btn btn-ghost" id="btnReceita">Consultar Receita</button>
+        </div>
+        <div id="docHint" class="campo-hint"><span class="muted">Digite o CNPJ e clique em "Consultar Receita" para preencher os dados automaticamente.</span></div>
+        <div id="sitBox" style="margin:10px 0">${situacaoTag(base.situacao)}${base.atividade ? `<div class="small muted" style="margin-top:4px">${esc(base.atividade)}</div>` : ''}</div>
+        <div class="field"><label>Razão social *</label><input name="nome" required value="${v('nome')}"></div>
+        <div class="field"><label>Nome fantasia</label><input name="nomeFantasia" value="${v('nomeFantasia')}"></div>
+        <div class="field"><label>Endereço</label><input name="endereco" value="${v('endereco')}"></div>
+        <div class="grid g3">
           <div><label>Cidade</label><input name="cidade" value="${v('cidade')}"></div>
+          <div><label>UF</label><input name="uf" maxlength="2" value="${v('uf')}"></div>
+          <div><label>CEP</label><input name="cep" value="${v('cep')}"></div>
+        </div>
+        <div class="grid g2" style="margin-top:14px">
           <div><label>Contato</label><input name="contato" value="${v('contato')}"></div>
           <div><label>Telefone / WhatsApp</label><input name="telefone" value="${v('telefone')}"></div>
         </div>
         <div class="field" style="margin-top:14px"><label>E-mail</label><input name="email" type="email" value="${v('email')}"></div>
         <div class="field"><label>Categorias que fornece</label><input name="categorias" value="${v('categorias')}" placeholder="Ex.: EPI; Embalagens e coletores"></div>
+        <input type="hidden" name="situacao" value="${v('situacao')}"><input type="hidden" name="atividade" value="${v('atividade')}">
         <button class="btn btn-primary">Salvar fornecedor</button>
-      </form>`, (bg) => {
+      </form>`, (bg, fechar) => {
       const fm = bg.querySelector('#fForn');
+      const hint = bg.querySelector('#docHint');
+      const btn = bg.querySelector('#btnReceita');
+      const aviso = (cls, msg) => { hint.innerHTML = `<span class="${cls}">${msg}</span>`; };
+      const consultar = async () => {
+        const d = S.digitos(fm.cnpj.value);
+        if (d.length === 11) { S.cpfValido(d) ? aviso('ok', '✓ CPF válido. A Receita não oferece consulta pública de CPF — preencha os dados manualmente.') : aviso('warn', 'CPF inválido — confira os números.'); return; }
+        if (d.length !== 14) { aviso('warn', 'Digite um CNPJ (14 dígitos) ou CPF (11 dígitos).'); return; }
+        if (!S.cnpjValido(d)) { aviso('warn', 'CNPJ inválido — confira os números.'); return; }
+        const dup = S.fornecedores().find(x => S.digitos(x.cnpj) === d && (!f || x.id !== f.id));
+        if (dup) { aviso('warn', `Este CNPJ já está cadastrado como "${esc(dup.nome)}".`); return; }
+        btn.disabled = true; btn.innerHTML = '<span class="spin dark"></span> Consultando…';
+        try {
+          const r = await S.consultaCnpj(d);
+          fm.cnpj.value = r.cnpj || fm.cnpj.value;
+          ['nome:razaoSocial', 'nomeFantasia', 'endereco', 'cidade', 'uf', 'cep', 'telefone', 'email', 'situacao', 'atividade'].forEach(par => {
+            const [campo, chave] = par.split(':'); const val = r[chave || campo];
+            if (val) fm[campo].value = val;
+          });
+          bg.querySelector('#sitBox').innerHTML = situacaoTag(r.situacao) + (r.atividade ? `<div class="small muted" style="margin-top:4px">${esc(r.atividade)}</div>` : '');
+          if (r.situacao && !/ATIVA/.test(r.situacao)) aviso('warn', `Atenção: empresa com situação "${esc(r.situacao)}" na Receita.`);
+          else aviso('ok', '✓ Dados preenchidos pela Receita Federal. Confira antes de salvar.');
+        } catch (e) { aviso('warn', esc(e.message)); }
+        btn.disabled = false; btn.textContent = 'Consultar Receita';
+      };
+      btn.onclick = consultar;
+      fm.cnpj.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); consultar(); } });
+      fm.cnpj.addEventListener('blur', () => { if (S.digitos(fm.cnpj.value).length === 14 && !fm.nome.value.trim()) consultar(); });
+      if (!f && S.digitos(base.cnpj).length === 14) consultar();
+      else (f ? fm.nome : fm.cnpj).focus();
       fm.addEventListener('submit', e => {
         e.preventDefault();
         const d = { id: f ? f.id : '' };
-        ['nome', 'cnpj', 'cidade', 'contato', 'telefone', 'email', 'categorias'].forEach(k => { d[k] = fm[k].value; });
-        executar(fm.querySelector('button'), () => S.act('saveFornecedor', { fornecedor: d }), 'Fornecedor salvo.');
+        ['nome', 'cnpj', 'nomeFantasia', 'endereco', 'cidade', 'uf', 'cep', 'contato', 'telefone', 'email', 'categorias', 'situacao', 'atividade'].forEach(k => { d[k] = fm[k].value; });
+        executar(fm.querySelector('button[class~="btn-primary"]'), () => S.act('saveFornecedor', { fornecedor: d }), 'Fornecedor salvo.',
+          o.onSaved ? j => { fechar(); o.onSaved(j.state.extra.salvo); } : undefined);
       });
     });
   }
@@ -714,8 +908,8 @@
         </div></div>
       <div class="filters">
         <select id="dPer"><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="180" selected>Últimos 6 meses</option><option value="365">Últimos 12 meses</option><option value="0">Todo o período</option></select>
-        <select id="dFil"><option value="">Todas as filiais</option>${opts(C.filiais)}</select>
-        <select id="dCC"><option value="">Todos os centros de custo</option>${opts(C.centrosCusto)}</select>
+        <select id="dFil"><option value="">Todas as filiais</option>${opts(S.listas().filial)}</select>
+        <select id="dCC"><option value="">Todos os centros de custo</option>${opts(S.listas().centroCusto)}</select>
       </div>
       <div id="dash"></div>`;
     el.querySelector('#expCSV').onclick = () => download('pedidos-compra.csv', S.exportCSV(), 'text/csv;charset=utf-8');
@@ -790,6 +984,15 @@
         : `<p style="margin:0">Os dados estão salvos apenas neste navegador. Para usar com toda a equipe, siga o <b>GUIA-GOOGLE.txt</b>: crie a planilha, instale o script e cole a URL em <code>js/config.js</code> (campo <code>apiUrl</code>).</p>`}
       </div>
       <div class="card">
+        <div class="card-head"><h2>Listas de validação</h2><span class="small muted">${S.modo === 'google' ? 'gravadas na aba "Listas" da planilha' : 'base de dados das listas'}</span></div>
+        <div class="listas-grid">${Object.keys(NOME_LISTA).map(t => `<div class="lista-col">
+          <h3>${NOME_LISTA[t]} <span class="muted small">(${S.listas()[t].length})</span></h3>
+          <div class="chips">${S.listas()[t].map(v => `<span class="chip">${esc(v)}<button type="button" data-rml="${t}" data-v="${esc(v)}" title="Remover">×</button></span>`).join('')}</div>
+          <form class="addl" data-tipo="${t}"><input placeholder="Novo valor" required><button class="btn btn-ghost btn-sm">${icon('plus', 14)}</button></form>
+        </div>`).join('')}</div>
+        <p class="small muted" style="margin:10px 0 0">Esses valores aparecem como opções na Nova solicitação e como listas suspensas na planilha. Remover um valor não altera pedidos já feitos.</p>
+      </div>
+      <div class="card">
         <div class="card-head"><h2>Limites de aprovação (alçadas)</h2></div>
         <form id="fLim" class="grid g4" style="align-items:end">
           ${[1, 2, 3].map(n => `<div><label>Nível 0${n} — ${esc(S.nomeNivel(n))} (R$)</label><input type="number" min="1" step="0.01" name="l${n}" value="${lim[n]}"></div>`).join('')}
@@ -812,7 +1015,7 @@
             <div><label>E-mail *</label><input name="email" type="email" required></div>
             <div><label>Senha <span class="muted" id="senhaHint"></span></label><input name="senha" type="text" autocomplete="off"></div>
             <div><label>Nível</label><select name="nivel">${[1, 2, 3].map(n => `<option value="${n}">Nível 0${n} — ${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
-            <div><label>Filial</label><select name="filial">${opts(C.filiais)}</select></div>
+            <div><label>Filial</label><select name="filial">${opts(S.listas().filial)}</select></div>
             <div style="display:flex;gap:8px;align-items:end"><button class="btn btn-primary">Salvar</button><button type="button" class="btn btn-ghost" id="cancU">Cancelar</button></div>
           </div>
         </form>
@@ -825,6 +1028,14 @@
         </div>
       </div>`;
 
+    el.querySelectorAll('form.addl').forEach(f => f.addEventListener('submit', e => {
+      e.preventDefault();
+      executar(f.querySelector('button'), () => S.act('addLista', { tipo: f.dataset.tipo, valor: f.querySelector('input').value }), 'Valor adicionado.');
+    }));
+    el.querySelectorAll('[data-rml]').forEach(b => b.onclick = () => {
+      if (!confirm(`Remover "${b.dataset.v}" da lista de ${NOME_LISTA[b.dataset.rml]}?`)) return;
+      executar(b, () => S.act('removeLista', { tipo: b.dataset.rml, valor: b.dataset.v }), 'Valor removido.');
+    });
     el.querySelector('#fLim').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
       executar(f.querySelector('button'), () => S.act('saveLimites', { limites: { 1: f.l1.value, 2: f.l2.value, 3: f.l3.value } }), 'Limites atualizados.');
@@ -833,7 +1044,7 @@
     const abrirForm = x => {
       fU.classList.remove('hidden'); fU.reset();
       fU.id.value = x ? x.id : ''; fU.nome.value = x ? x.nome : ''; fU.email.value = x ? x.email : '';
-      fU.nivel.value = x ? x.nivel : 1; fU.filial.value = x ? x.filial : C.filiais[0];
+      fU.nivel.value = x ? x.nivel : 1; fU.filial.value = x ? x.filial : S.listas().filial[0];
       el.querySelector('#senhaHint').textContent = x ? '(deixe em branco para manter)' : '*';
       fU.nome.focus();
     };
