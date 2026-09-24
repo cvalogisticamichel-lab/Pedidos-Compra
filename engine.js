@@ -16,7 +16,7 @@ var CVEngine = (function () {
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
     Itens: ['id', 'codigo', 'descricao', 'unidade', 'categoria', 'fornecedorPreferido', 'ultimoPreco', 'ultimaCompra', 'ativo', 'criadoEm'],
-    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual', 'statusCred', 'cadastradoPor', 'credAnalisadoPor', 'credAnalisadoEm', 'credObs'],
+    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual', 'statusCred', 'cadastradoPor', 'credAnalisadoPor', 'credAnalisadoEm', 'credObs', 'credAlteracoes'],
     Listas: ['filial', 'modalidade', 'categoria', 'unidade', 'departamento'],
     Historico_Precos: ['em', 'itemId', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero', 'solicitacaoId'],
     Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm', 'cpf', 'status', 'aprovadoPor', 'aprovadoEm', 'obsAcesso', 'assinatura', 'tokenAssinatura', 'departamento'],
@@ -134,6 +134,15 @@ var CVEngine = (function () {
     sujar(db, 'Historico');
   }
   function itemPorDescricao(db, d) { var n = norm(d); for (var i = 0; i < db.Itens.length; i++) if (norm(db.Itens[i].descricao) === n) return db.Itens[i]; return null; }
+  /** Fornecedor da solicitação ainda não credenciado? (vazio = sem fornecedor, não bloqueia) */
+  function situacaoFornecedor(db, nome) {
+    if (!txt(nome)) return { ok: true };
+    var f = fornPorNome(db, nome);
+    if (!f) return { ok: false, motivo: 'não cadastrado', fornecedor: null };
+    if (f.statusCred === 'pendente') return { ok: false, motivo: 'aguardando credenciamento', fornecedor: f };
+    if (f.statusCred === 'recusado') return { ok: false, motivo: 'com credenciamento recusado', fornecedor: f };
+    return { ok: true, fornecedor: f };
+  }
   function fornPorNome(db, nome) { var n = norm(nome); for (var i = 0; i < db.Fornecedores.length; i++) if (norm(db.Fornecedores[i].nome) === n) return db.Fornecedores[i]; return null; }
 
   // ---------- listas (aba Listas: uma coluna por lista) ----------
@@ -290,7 +299,7 @@ var CVEngine = (function () {
         return o;
       })
       .sort(function (a, b) { return String(b.criadoEm).localeCompare(String(a.criadoEm)); });
-    var precos = db.Historico_Precos.slice().sort(function (a, b) { return String(b.em).localeCompare(String(a.em)); }).slice(0, 3000);
+    var precos = (nivelDe(u) < 2 && !fin(u) ? [] : db.Historico_Precos).slice().sort(function (a, b) { return String(b.em).localeCompare(String(a.em)); }).slice(0, 3000);
     return {
       user: publico(u),
       limites: limites(db),
@@ -351,6 +360,8 @@ var CVEngine = (function () {
       manutencaoId: veic ? txt(d.manutencaoId) : '', manutencaoDesc: veic && txt(d.manutencaoId) ? txt(d.manutencaoDesc) : '', manutPdfEm: '', manutPdfUrl: ''
     };
     if (r.orcIncompleto && r.nivelNecessario < 3) r.nivelNecessario = 3;   // sem os orçamentos mínimos: sempre Gerente
+    var sf = situacaoFornecedor(db, r.fornecedor);
+    if (!sf.ok && r.nivelNecessario < 3) r.nivelNecessario = 3;            // fornecedor não credenciado: sempre Gerente
     db.Solicitacoes.push(r);
     itens.forEach(function (i, k) {
       if (!i.itemId && i.tipo !== 'servico') { var c = itemPorDescricao(db, i.descricao); if (c) i.itemId = c.id; }
@@ -358,18 +369,19 @@ var CVEngine = (function () {
     });
     sujar(db, 'Solicitacoes', 'Itens_Solicitacao');
     hist(db, r, u.nome, 'Solicitação criada', '', em);
-    if (!r.orcIncompleto && r.nivelNecessario <= 3 && total <= limiteDoUsuario(lim, u)) {
+    if (sf.ok && !r.orcIncompleto && r.nivelNecessario <= 3 && total <= limiteDoUsuario(lim, u)) {
       r.status = 'aprovado'; r.aprovadorId = u.id; r.aprovadorNome = u.nome; r.nivelAprovador = Number(u.nivel); r.decididoEm = em;
       numerarPedido(db, r, em);
       hist(db, r, u.nome, 'Aprovado dentro da própria alçada — Pedido de Compra Nº ' + r.numeroPdf, '', em);
     } else {
-      hist(db, r, 'Sistema', 'Aguardando autorização: ' + NOMES[r.nivelNecessario] + (r.orcIncompleto ? ' (enviada com ' + r.qtdOrcamentos + ' orçamento(s), abaixo do mínimo)' : ''), '', em);
+      hist(db, r, 'Sistema', 'Aguardando autorização: ' + NOMES[r.nivelNecessario] + (r.orcIncompleto ? ' (enviada com ' + r.qtdOrcamentos + ' orçamento(s), abaixo do mínimo)' : '') + (sf.ok ? '' : ' — fornecedor ' + sf.motivo), '', em);
     }
     return r;
   }
 
   function decidir(db, r, u, aprovar, obs, em) {
     if (!podeAprovar(u, r, limites(db))) erro('Você não tem alçada para decidir esta solicitação.');
+    if (aprovar) { var sfd = situacaoFornecedor(db, r.fornecedor); if (!sfd.ok) erro('O fornecedor "' + r.fornecedor + '" está ' + sfd.motivo + '. Valide o credenciamento do fornecedor antes de autorizar.'); }
     if (!aprovar && !txt(obs)) erro('Informe o motivo da reprovação.');
     em = em || agora();
     r.status = aprovar ? 'aprovado' : 'reprovado';
@@ -513,7 +525,21 @@ var CVEngine = (function () {
         var campos = { nome: txt(f.nome), cnpj: formatarDoc(doc), contato: txt(f.contato), telefone: txt(f.telefone), email: txt(f.email), cidade: txt(f.cidade), categorias: txt(f.categorias),
           nomeFantasia: txt(f.nomeFantasia), endereco: txt(f.endereco), uf: txt(f.uf).toUpperCase(), cep: txt(f.cep), situacao: txt(f.situacao), atividade: txt(f.atividade), inscricaoEstadual: txt(f.inscricaoEstadual) };
         var fx;
-        if (f.id) { fx = porId(db.Fornecedores, f.id); if (!fx) erro('Fornecedor não encontrado.'); for (var k in campos) fx[k] = campos[k]; }
+        if (f.id) {
+          fx = porId(db.Fornecedores, f.id); if (!fx) erro('Fornecedor não encontrado.');
+          // Comprador/Supervisor alterando dados cadastrais (exceto contato, telefone, e-mail e categorias): volta para o credenciamento
+          var LIVRES = { contato: 1, telefone: 1, email: 1, categorias: 1 };
+          var ROT = { nome: 'Razão social', cnpj: 'CNPJ/CPF', cidade: 'Cidade', nomeFantasia: 'Nome fantasia', endereco: 'Endereço', uf: 'UF', cep: 'CEP', situacao: 'Situação na Receita', atividade: 'Atividade', inscricaoEstadual: 'Inscrição estadual' };
+          var mud = [];
+          for (var k0 in campos) if (!LIVRES[k0] && txt(fx[k0]) !== txt(campos[k0])) mud.push((ROT[k0] || k0) + ': "' + (txt(fx[k0]) || '—') + '" → "' + (txt(campos[k0]) || '—') + '"');
+          for (var k in campos) fx[k] = campos[k];
+          if (mud.length && nivelDe(u) < 3) {
+            var dt = agora().slice(0, 10).split('-').reverse().join('/');
+            fx.credAlteracoes = (fx.statusCred === 'pendente' && txt(fx.credAlteracoes) ? txt(fx.credAlteracoes) + '\n' : '') + 'Alterado por ' + u.nome + ' em ' + dt + ': ' + mud.join('; ');
+            fx.statusCred = 'pendente';
+            extra.msg = 'Alterações salvas. O fornecedor voltou para o credenciamento de um gerente.';
+          }
+        }
         else {
           fx = campos; campos.id = ctx.uuid(); campos.ativo = true; campos.criadoEm = agora(); campos.cadastradoPor = u.nome;
           var auto = Number(u.nivel) >= 3;   // gerente já credencia; demais aguardam aprovação
@@ -525,11 +551,19 @@ var CVEngine = (function () {
         sujar(db, 'Fornecedores');
         break;
       }
+      case 'descredenciarFornecedor': {   // gestor exclui o cadastro do fornecedor
+        exigir(u, 3);
+        var fd2 = porId(db.Fornecedores, p.id); if (!fd2) erro('Fornecedor não encontrado.');
+        db.Fornecedores.splice(db.Fornecedores.indexOf(fd2), 1);
+        sujar(db, 'Fornecedores'); extra.msg = fd2.nome + ' descredenciado e removido do cadastro.';
+        break;
+      }
       case 'aprovarFornecedor': case 'recusarFornecedor': {
         exigir(u, 3);
         var fc = porId(db.Fornecedores, p.id); if (!fc) erro('Fornecedor não encontrado.');
         var ok = action === 'aprovarFornecedor';
         fc.statusCred = ok ? 'aprovado' : 'recusado'; fc.credAnalisadoPor = u.nome; fc.credAnalisadoEm = agora(); fc.credObs = ok ? '' : txt(p.motivo);
+        if (ok) fc.credAlteracoes = '';
         sujar(db, 'Fornecedores'); extra.msg = ok ? fc.nome + ' credenciado.' : 'Credenciamento recusado.';
         break;
       }
@@ -789,7 +823,7 @@ var CVEngine = (function () {
   return {
     TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA, FINANCEIRO: FINANCEIRO,
     linhasListasPadrao: linhasListasPadrao, listas: listas, cnpjValido: cnpjValido, cpfValido: cpfValido, digitos: digitos, formatarDoc: formatarDoc, normalizarCnpj: normalizarCnpj,
-    novoDb: novoDb, seed: seed, registrarHist: hist, manutencoesDemo: manutencoesDemo, STATUS_MANUTENCAO: STATUS_MANUTENCAO, resumoManutencao: resumoManutencao, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
+    novoDb: novoDb, seed: seed, situacaoFornecedor: situacaoFornecedor, registrarHist: hist, manutencoesDemo: manutencoesDemo, STATUS_MANUTENCAO: STATUS_MANUTENCAO, resumoManutencao: resumoManutencao, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, podeVer: podeVer, limiteDoUsuario: limiteDoUsuario, limiteGerente: limiteGerente, maiorTetoGerente: maiorTetoGerente,
     migrar: migrar, sincronizarPlacas: sincronizarPlacas, ehVeiculo: ehVeiculo, TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_MANUTENCAO: TIPOS_MANUTENCAO, MODALIDADE_VEICULOS: MODALIDADE_VEICULOS,
     CAT_PRODUTOS: CAT_PRODUTOS, CAT_SERVICOS: CAT_SERVICOS, CAT_AMBOS: CAT_AMBOS, CAT_CONSUMIVEIS: CAT_CONSUMIVEIS, rotuloProdutos: rotuloProdutos, temProdutos: temProdutos, temServicos: temServicos, norm: norm, r2: r2

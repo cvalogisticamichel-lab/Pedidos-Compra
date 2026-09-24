@@ -88,7 +88,7 @@
     { id: 'aprovacoes', nome: 'Aguardando Autorização', curto: 'Autorização', icon: 'check', nivel: 1 },
     { id: 'itens', nome: 'Itens', icon: 'box', nivel: 1, grupo: 'Cadastros' },
     { id: 'fornecedores', nome: 'Fornecedores', icon: 'truck', nivel: 1 },
-    { id: 'precos', nome: 'Histórico de preços', curto: 'Preços', icon: 'chart', nivel: 1 },
+    { id: 'precos', nome: 'Histórico de preços', curto: 'Preços', icon: 'chart', nivel: 2 },
     { id: 'credenciamento', nome: 'Credenciamento', curto: 'Credenc.', icon: 'shield', nivel: 3, grupo: 'Gestão' },
     { id: 'acessos', nome: 'Acessos', icon: 'user', nivel: 3 },
     { id: 'config', nome: 'Configurações', curto: 'Config.', icon: 'cog', nivel: 3 }
@@ -272,7 +272,7 @@
     document.querySelectorAll('.modal-bg').forEach(m => m.remove());
     acFechar();
     const rota = rotaAtual();
-    const disp = ROTAS.filter(r => FIN(u) ? r.nivel <= 1 && r.id !== 'nova' : u.nivel >= r.nivel);
+    const disp = ROTAS.filter(r => FIN(u) ? (r.nivel <= 1 || r.id === 'precos') && r.id !== 'nova' : u.nivel >= r.nivel);
     document.body.classList.toggle('consulta', FIN(u));
     const r = disp.find(x => x.id === rota.id) || disp[0];
     const nPend = FIN(u) ? 0 : nv(u) >= 2 ? avisosParaMim(u).length : S.listRequests().filter(x => x.status === 'pendente' && x.solicitanteId === u.id).length;
@@ -543,7 +543,7 @@
         <td class="hide-sm hide-md">${esc(r.modalidade || '—')}${r.tipoManutencao ? `<div class="small muted">${esc(r.tipoManutencao)}</div>` : ''}</td>
         <td class="hide-sm hide-md">${esc(r.centroCusto)}</td>
         <td class="r num"><b>${brl(r.total)}</b></td>
-        <td>${statusTag(r.status)}${r.status === 'pendente' ? `<div class="small muted">→ ${esc(S.nomeNivel(r.nivelNecessario))}${r.orcIncompleto ? ` · <span class="txt-alerta">${r.qtdOrcamentos || 0} orç.</span>` : ''}</div>` : ''}${r.numeroPdf && ['aprovado', 'comprado'].includes(r.status) ? `<div class="small muted">Pedido ${esc(r.numeroPdf)}</div>` : ''}</td>
+        <td>${statusTag(r.status)}${r.status === 'pendente' ? `<div class="small muted">→ ${esc(S.nomeNivel(r.nivelNecessario))}${r.orcIncompleto ? ` · <span class="txt-alerta">${r.qtdOrcamentos || 0} orç.</span>` : ''}${S.situacaoFornecedor(r.fornecedor).ok ? '' : ' · <span class="txt-alerta">fornecedor não credenciado</span>'}</div>` : ''}${r.numeroPdf && ['aprovado', 'comprado'].includes(r.status) ? `<div class="small muted">Pedido ${esc(r.numeroPdf)}</div>` : ''}</td>
         ${extra ? `<td>${extra(r)}</td>` : ''}
       </tr>`).join('')}</tbody></table></div>`;
   }
@@ -842,6 +842,7 @@
     };
     autocompletar(fIn, { buscar: buscarFornecedores, aoEscolher: atualizarFornInfo, textoCriar: q => `Cadastrar novo fornecedor "${q}"`, aoCriar: cadastrarForn });
     fIn.addEventListener('input', atualizarFornInfo);
+    fIn.addEventListener('input', () => { try { atualizarTotal(); } catch (e) { /* ainda montando */ } });
     atualizarFornInfo();
 
     // --- itens ---
@@ -853,7 +854,7 @@
         return semAcento(it.descricao).length >= 3 ? `<div class="campo-hint"><span class="warn">Item não cadastrado.</span> <button type="button" class="btn-mini laranja" data-cad="${i}">${icon('plus', 13)} Cadastrar item</button></div>` : '';
       }
       const s = S.statsPreco(it.itemId, it.descricao);
-      if (!s) return '<div class="preco-info">✓ Item cadastrado · sem compras anteriores</div>';
+      if (!s) return `<div class="preco-info">✓ Item cadastrado${nv(u) >= 2 || FIN(u) ? ' · sem compras anteriores' : ''}</div>`;
       const v = Number(it.valorUnit) || 0;
       const dif = v && s.media ? (v / s.media - 1) * 100 : 0;
       return `<div class="preco-info ${dif > 10 ? 'alto' : ''}">últ. ${brl(s.ultimo)}${s.ultimoForn ? ' · ' + esc(s.ultimoForn) : ''} · méd. ${brl(s.media)}${dif > 10 ? ` · ▲ ${dif.toFixed(0)}% acima` : ''}</div>`;
@@ -916,7 +917,9 @@
       const nec = S.nivelNecessario(total);
       const faltaOrc = orcs.filter(o => o.file && o.fornecedor.trim()).length < minOrc;
       const minha = S.limiteDoUsuario(u);
-      if (faltaOrc) { h.className = 'hint warn'; h.textContent = `Menos de ${minOrc} orçamentos — irá para autorização do Gerente.`; }
+      const sfN = S.situacaoFornecedor(fIn.value.trim());
+      if (!sfN.ok) { h.className = 'hint warn'; h.textContent = `Fornecedor ${sfN.motivo} — irá para autorização do Gerente, que precisa validar o credenciamento.`; }
+      else if (faltaOrc) { h.className = 'hint warn'; h.textContent = `Menos de ${minOrc} orçamentos — irá para autorização do Gerente.`; }
       else if (total <= minha) { h.className = 'hint ok'; h.textContent = `✓ Dentro da sua alçada (${brl(minha)}) — será autorizado ao enviar.`; }
       else if (nec >= 4) { h.className = 'hint warn'; h.textContent = `Acima do teto dos gerentes (${brl(S.maiorTetoGerente())}) — seguirá para a ${C.instanciaSuperior}.`; }
       else { h.className = 'hint warn'; h.textContent = `Acima da sua alçada — seguirá para aprovação: ${S.nomeNivel(nec)}.`; }
@@ -1126,7 +1129,7 @@
       ${separarDep ? `<div class="card" id="cardOutros"><div class="card-head"><h2>Outros departamentos (${outros.length})</h2><span class="small muted">você também pode autorizar · sem notificação</span></div><div id="tabOutros">${tabela(outros, acoes)}</div></div>` : ''}
       <div class="card"><div class="card-head"><h2>Minhas solicitações aguardando (${minhas.length})</h2></div>${tabela(minhas)}</div>
       ${acima.length ? `<div class="card"><div class="card-head"><h2>Acima da sua alçada (${acima.length})</h2><span class="small muted">somente acompanhamento</span></div>${tabela(acima)}</div>` : ''}`;
-    const ligarAcoes = () => { bindLinhas(el); el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), j => { const r = j.state.requests.find(x => x.id === b.dataset.ap); return `Autorizado — Pedido de Compra Nº ${r ? r.numeroPdf : ''}`; },
+    const ligarAcoes = () => { bindLinhas(el); el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => bloqueioFornecedor(S.getRequest(b.dataset.ap), u) || executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), j => { const r = j.state.requests.find(x => x.id === b.dataset.ap); return `Autorizado — Pedido de Compra Nº ${r ? r.numeroPdf : ''}`; },
       async () => { await gerarPdfPedido(b.dataset.ap, { baixar: true, msg: 'Gerando o Pedido de Compra com as assinaturas…' }); render(); }));
     el.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => abrirDetalhe(b.dataset.rp, 'reprovar')); };
     ligarAcoes();
@@ -1246,6 +1249,7 @@
       bg.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
         const obs = bg.querySelector('#obs').value;
         const a = b.dataset.act;
+        if (a === 'aprovar' && bloqueioFornecedor(r, u)) return;
         const acoes = {
           aprovar: () => S.act('decide', { id: r.id, aprovar: true, obs }),
           reprovar: () => S.act('decide', { id: r.id, aprovar: false, obs }),
@@ -1272,7 +1276,7 @@
   function vCadastros(el, u, aba) {
     aba = ['itens', 'fornecedores', 'precos'].includes(aba) ? aba : 'itens';
     const TIT = {
-      itens: ['Itens', `${S.catalogo().length} itens cadastrados. Clique em um item para ver o histórico de preços.`],
+      itens: ['Itens', `${S.catalogo().length} itens cadastrados.${nv(u) >= 2 || FIN(u) ? ' Clique em um item para ver o histórico de preços.' : ''}`],
       fornecedores: ['Fornecedores', `${S.fornecedores().length} fornecedores. Novos cadastros passam pelo credenciamento de um gerente.`],
       precos: ['Histórico de preços', 'Preços pagos, gravados automaticamente a cada compra efetivada.']
     }[aba];
@@ -1306,7 +1310,8 @@
         </tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">Nenhum item encontrado.</div>';
       box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => formItem(itens.find(i => i.id === b.dataset.ed)));
       box.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => executar(b, () => S.act('toggleItem', { id: b.dataset.tg }), 'Item atualizado.'));
-      box.querySelectorAll('tr[data-item]').forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) historicoItem(itens.find(i => i.id === tr.dataset.item)); });
+      if (nv(u) >= 2 || FIN(u)) box.querySelectorAll('tr[data-item]').forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) historicoItem(itens.find(i => i.id === tr.dataset.item)); });
+      else box.querySelectorAll('tr[data-item]').forEach(tr => tr.classList.remove('click'));
     };
     box.querySelector('#novo').onclick = () => formItem(null);
     box.querySelectorAll('#q, #qCat').forEach(i => i.addEventListener('input', pintar));
@@ -1378,14 +1383,49 @@
           <td class="hide-sm">${esc(f.contato)}<div class="small muted">${[f.telefone, f.email].filter(Boolean).map(esc).join(' · ')}</div></td>
           <td class="hide-sm small">${esc(f.categorias)}</td>
           ${u.nivel >= 2 ? `<td class="r num">${gasto[S.norm(f.nome)] ? brl(gasto[S.norm(f.nome)]) : '—'}</td>` : ''}
-          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${f.id}">Editar</button>${nv(u) >= 2 ? ` <button class="btn btn-ghost btn-sm" data-tg="${f.id}">${ativo(f) ? 'Desativar' : 'Ativar'}</button>` : ''}</td>
+          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${f.id}">Editar</button>${nv(u) >= 2 ? ` <button class="btn btn-ghost btn-sm" data-tg="${f.id}">${ativo(f) ? 'Desativar' : 'Ativar'}</button>` : ''}${nv(u) >= 3 ? ` <button class="btn btn-danger btn-sm" data-desc="${f.id}">Descredenciar</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nenhum fornecedor encontrado.</div>';
       box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => formFornecedor(lst.find(f => f.id === b.dataset.ed)));
       box.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => executar(b, () => S.act('toggleFornecedor', { id: b.dataset.tg }), 'Fornecedor atualizado.'));
+      box.querySelectorAll('[data-desc]').forEach(b => b.onclick = () => {
+        const f = lst.find(x => x.id === b.dataset.desc); if (!f) return;
+        if (!confirm(`Descredenciar "${f.nome}"?\n\nO cadastro do fornecedor será EXCLUÍDO. As solicitações e pedidos antigos continuam com o nome dele.\n\nEsta ação não pode ser desfeita.`)) return;
+        executar(b, () => S.act('descredenciarFornecedor', { id: f.id }), j => j.state.extra.msg || 'Fornecedor descredenciado.');
+      });
     };
     box.querySelector('#novo').onclick = () => formFornecedor(null);
     box.querySelector('#q').addEventListener('input', pintar);
     pintar();
+  }
+
+  /** Autorizar com fornecedor não credenciado: avisa e leva ao credenciamento. Devolve true se bloqueou. */
+  function bloqueioFornecedor(r, u) {
+    if (!r) return false;
+    const sf = S.situacaoFornecedor(r.fornecedor);
+    if (sf.ok) return false;
+    const ger = nv(u) >= 3;
+    const bg = document.createElement('div');
+    bg.className = 'popup-bg';
+    bg.innerHTML = `<div class="popup" role="alertdialog" aria-modal="true">
+      <div class="popup-ico">${icon('shield', 26)}</div>
+      <h2>Valide o credenciamento do fornecedor</h2>
+      <p>O fornecedor <b>${esc(r.fornecedor)}</b> está <b>${esc(sf.motivo)}</b>. A solicitação ${esc(r.numero)} só pode ser autorizada depois que o fornecedor for credenciado.</p>
+      ${ger ? '' : '<p class="small muted">Peça a um gerente para validar o credenciamento.</p>'}
+      <div class="acoes" style="justify-content:flex-end;margin:0">
+        <button class="btn btn-ghost" data-x>Fechar</button>
+        ${ger ? `<button class="btn btn-primary" data-ir>${icon('shield', 16)} ${sf.fornecedor ? 'Ir para o credenciamento' : 'Cadastrar e credenciar'}</button>` : ''}
+      </div></div>`;
+    const fechar = () => bg.remove();
+    bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-x]')) fechar(); });
+    const ir = bg.querySelector('[data-ir]');
+    if (ir) ir.onclick = () => {
+      fechar(); document.querySelectorAll('.modal-bg').forEach(m => m.remove());
+      if (sf.fornecedor) location.hash = '#/credenciamento/' + sf.fornecedor.id;
+      else formFornecedor(null, { prefill: { nome: r.fornecedor }, onSaved: () => render() });
+    };
+    document.body.appendChild(bg);
+    (ir || bg.querySelector('[data-x]')).focus();
+    return true;
   }
 
   const credTag = f => f.statusCred === 'pendente' ? '<span class="status st-pendente">Aguardando credenciamento</span>' : f.statusCred === 'recusado' ? '<span class="status st-reprovado">Credenciamento recusado</span>' : '';
@@ -1555,7 +1595,7 @@
   }
 
   // ========== CREDENCIAMENTO DE FORNECEDORES (Gerente) ==========
-  function vCredenciamento(el) {
+  function vCredenciamento(el, u, foco) {
     const todos = S.fornecedores();
     const pend = todos.filter(f => f.statusCred === 'pendente');
     const hist = todos.filter(f => f.credAnalisadoEm && f.statusCred !== 'pendente' && f.credAnalisadoPor !== 'Sistema').sort((a, b) => String(b.credAnalisadoEm).localeCompare(String(a.credAnalisadoEm))).slice(0, 12);
@@ -1575,6 +1615,8 @@
           <div><span>Situação na Receita</span>${f.situacao ? situacaoTag(f.situacao) : '—'}</div>
           <div><span>Categorias</span>${esc(f.categorias || '—')}</div>
           <div><span>Cadastrado por</span>${esc(f.cadastradoPor || '—')} · ${data(f.criadoEm)}</div>
+          ${f.credAlteracoes ? `<div class="cred-alteracoes" style="grid-column:1/-1"><span>Alterações a validar</span>${esc(f.credAlteracoes).replace(/\n/g, '<br>')}</div>` : ''}
+          ${(() => { const n = S.listRequests().filter(r => r.status === 'pendente' && S.norm(r.fornecedor) === S.norm(f.nome)).length; return n ? `<div style="grid-column:1/-1"><span>Solicitações aguardando</span><b class="txt-alerta">${n} solicitação(ões) aguardam este credenciamento para serem autorizadas</b></div>` : ''; })()}
         </div>
         <div class="acoes" style="margin-top:4px">
           <button class="btn btn-primary" data-ok>${icon('shield', 16)} Credenciar</button>
@@ -1588,6 +1630,7 @@
         <tbody>${hist.map(f => `<tr><td><b>${esc(f.nome)}</b><div class="small muted">${esc(f.cnpj || '')}</div></td>
           <td>${f.statusCred === 'recusado' ? `<span class="status st-reprovado">Recusado</span>${f.credObs ? `<div class="small muted">${esc(f.credObs)}</div>` : ''}` : '<span class="status st-aprovado">Credenciado</span>'}</td>
           <td class="hide-sm">${esc(f.credAnalisadoPor)}</td><td class="hide-sm num">${dataHora(f.credAnalisadoEm)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+    if (foco) { const alvo = el.querySelector(`.acesso[data-id="${CSS.escape(foco)}"]`); if (alvo) { alvo.classList.add('destaque-cred'); setTimeout(() => alvo.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); } }
     el.querySelectorAll('.acesso').forEach(c => {
       const id = c.dataset.id;
       c.querySelector('[data-ok]').onclick = e => executar(e.currentTarget, () => S.act('aprovarFornecedor', { id }), j => j.state.extra.msg || 'Fornecedor credenciado.');

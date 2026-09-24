@@ -277,6 +277,7 @@
       c[k] = { t: Date.now(), l }; return l;
     },
     resumoManutencao: E.resumoManutencao,
+    situacaoFornecedor: nome => E.situacaoFornecedor({ Fornecedores: (st && st.fornecedores) || [] }, nome),
     /** Consulta CNPJ: BrasilAPI direto do navegador; se falhar, via servidor Google (BrasilAPI/ReceitaWS). */
     async consultaCnpj(cnpj) {
       const d = E.digitos(cnpj);

@@ -446,3 +446,12 @@ fieldset.fs-limpo { border: 0; padding: 0; margin-bottom: 0; }
 .aviso-api svg { flex: none; margin-top: 2px; }
 .larga-grid { grid-column: 1 / -1; }
 .dl .larga { grid-column: 1 / -1; }
+
+/* ===== v2.12 — credenciamento obrigatório ===== */
+.popup-bg { position: fixed; inset: 0; background: rgba(15, 25, 20, .55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2000; }
+.popup { background: var(--card); border-radius: 16px; max-width: 460px; width: 100%; padding: 22px; box-shadow: 0 16px 40px rgba(0,0,0,.28); }
+.popup h2 { margin: 8px 0 8px; font-size: 18px; }
+.popup p { margin: 0 0 12px; line-height: 1.5; }
+.popup-ico { width: 46px; height: 46px; border-radius: 50%; background: #fff3e0; color: #b46a00; display: flex; align-items: center; justify-content: center; }
+.destaque-cred { outline: 3px solid #f0a020; outline-offset: 2px; }
+.cred-alteracoes { background: #fff8ec; border: 1px solid #f3d9a6; border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.5; }
