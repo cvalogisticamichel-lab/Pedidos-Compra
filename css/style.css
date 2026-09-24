@@ -70,7 +70,7 @@ textarea { min-height: 80px; resize: vertical; }
 .login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; }
 .login-hero { background: linear-gradient(150deg, var(--verde-900), var(--verde-700) 60%, var(--verde-500)); color: #fff; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
 .login-hero::after { content: ''; position: absolute; right: -120px; bottom: -120px; width: 380px; height: 380px; border-radius: 50%; background: rgba(255, 147, 2, .18); }
-.login-hero .logo-img { height: 52px; width: auto; align-self: flex-start; filter: brightness(0) invert(1); }
+.login-hero .logo-img { height: 56px; width: auto; align-self: flex-start; }
 .login-hero h1 { font-size: 2.2rem; max-width: 420px; }
 .login-hero p { opacity: .85; max-width: 420px; }
 .login-form { display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
@@ -84,7 +84,7 @@ textarea { min-height: 80px; resize: vertical; }
 .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
 .sidebar { background: var(--verde-900); color: #cfe6d6; padding: 20px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
 .sidebar .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 22px; }
-.sidebar .brand img { height: 40px; filter: brightness(0) invert(1); }
+.sidebar .brand img { height: 42px; }
 .nav a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: #cfe6d6; text-decoration: none; font-weight: 500; margin-bottom: 2px; position: relative; }
 .nav a:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 .nav a.active { background: var(--verde-700); color: #fff; }
@@ -287,3 +287,31 @@ button.link { background: none; border: 0; padding: 0; font: inherit; font-weigh
 .addl input { padding: 7px 10px; }
 @media (max-width: 1000px) { .listas-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .listas-grid { grid-template-columns: 1fr; } }
+
+/* ---------- v2.2: nova solicitação em 3 etapas, fornecedor, botões ---------- */
+.card-compacto { padding: 16px 20px; }
+.card-compacto select, .card-compacto input, .card-compacto textarea { padding: 8px 12px; }
+.card-compacto textarea { min-height: 58px; }
+.card-titulo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 1.02rem; }
+.passo { width: 24px; height: 24px; border-radius: 50%; background: var(--verde-700); color: #fff; font-size: .8rem; font-weight: 700; display: inline-grid; place-items: center; flex: none; }
+.forn-info { margin-top: 12px; border: 1px solid var(--verde-100); background: var(--verde-50); border-radius: 10px; padding: 12px 14px; }
+.forn-info-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.forn-info-top .btn-mini { margin-left: auto; }
+.forn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; font-size: .9rem; }
+.forn-grid span { display: block; font-size: .72rem; color: var(--tinta-3); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.forn-grid .larga { grid-column: 1 / -1; }
+.forn-alerta { margin-top: 12px; display: flex; align-items: center; gap: 12px; border: 1px solid #ffd49a; background: var(--laranja-100); color: #8a4f00; border-radius: 10px; padding: 12px 14px; }
+.forn-alerta > svg { flex: none; }
+.forn-alerta > div { flex: 1; min-width: 0; }
+.forn-alerta .small { color: #9a6a2a; }
+.btn-mini { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--verde-500); background: #fff; color: var(--verde-700); font: inherit; font-size: .78rem; font-weight: 700; border-radius: 99px; padding: 3px 10px; cursor: pointer; vertical-align: middle; }
+.btn-mini:hover { background: var(--verde-700); color: #fff; }
+.btn-mini.laranja { border-color: var(--laranja); color: #b36400; }
+.btn-mini.laranja:hover { background: var(--laranja); color: #fff; }
+@media (max-width: 760px) {
+  .forn-grid { grid-template-columns: 1fr; }
+  .forn-alerta { flex-wrap: wrap; }
+  .forn-alerta .btn { width: 100%; }
+}
+.nivel-tag { white-space: nowrap; }
+.addl input { flex: 1; min-width: 0; }
