@@ -19,17 +19,27 @@ var CVEngine = (function () {
     Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade', 'inscricaoEstadual'],
     Listas: ['filial', 'centroCusto', 'categoria', 'unidade'],
     Historico_Precos: ['em', 'itemId', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero', 'solicitacaoId'],
-    Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm'],
+    Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm', 'cpf', 'status', 'aprovadoPor', 'aprovadoEm', 'obsAcesso'],
     Config: ['chave', 'valor']
   };
   // Tipos para conversão ao ler/gravar na planilha
   var NUMEROS = ['nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
-  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra'];
+  var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra', 'aprovadoEm'];
   var BOOLEANOS = ['ativo'];
-  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual'];
+  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade', 'inscricaoEstadual', 'cpf'];
 
   var PADRAO = { limites: { 1: 2000, 2: 10000, 3: 50000 } };
   var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria' };
+  // ===== ACESSOS =====
+  var DOMINIO_AUTORIZADO = 'cheiroverdeambiental.com.br';
+  var EMAILS_EXTERNOS_AUTORIZADOS = {       // diretores (e-mails fora do domínio)
+    'shiogabra@hotmail.com': 'Norio Shioga',
+    'carlameleck@hotmail.com': 'Carla Méleck'
+  };
+  var SUPER_ADMIN = 'michel@cheiroverdeambiental.com.br'; // único que vê/edita "Alçadas e regras"
+  function emailAutorizado(e) { e = String(e || '').trim().toLowerCase(); return /^[^@\s]+@cheiroverdeambiental\.com\.br$/.test(e) || !!EMAILS_EXTERNOS_AUTORIZADOS[e]; }
+  function ehSuperAdmin(u) { return !!u && String(u.email || '').trim().toLowerCase() === SUPER_ADMIN; }
+  function statusUsuario(u) { return u.status || (u.ativo === false ? 'inativo' : 'ativo'); }
   // Valores iniciais da aba "Listas" (base de dados das listas de validação)
   var LISTAS_PADRAO = {
     filial: ['Bernardino de Campos (Matriz)', 'Assis', 'São Manuel', 'Botucatu'],
@@ -69,7 +79,7 @@ var CVEngine = (function () {
   function minOrcamentos(db) { var v = cfg(db, 'min_orcamentos', 3); return v === '' || v == null || isNaN(Number(v)) ? 3 : Number(v); }
   function nivelNecessario(lim, total) { for (var n = 1; n <= 3; n++) if (total <= Number(lim[n])) return n; return 4; }
   function podeAprovar(u, r) { return !!u && r.status === 'pendente' && Number(r.nivelNecessario) <= Number(u.nivel) && Number(r.nivelNecessario) <= 3; }
-  function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel), filial: u.filial, ativo: u.ativo !== false }; }
+  function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel) || 0, filial: u.filial, ativo: u.ativo !== false, status: statusUsuario(u), cpf: u.cpf || '', criadoEm: u.criadoEm || '', aprovadoPor: u.aprovadoPor || '', aprovadoEm: u.aprovadoEm || '', obsAcesso: u.obsAcesso || '' }; }
   function hist(db, r, usuario, acao, obs, em) {
     db.Historico.push({ solicitacaoId: r.id, numero: r.numero, em: em || agora(), usuario: usuario, acao: acao, obs: txt(obs) });
     sujar(db, 'Historico');
@@ -197,6 +207,8 @@ var CVEngine = (function () {
       user: publico(u),
       limites: limites(db),
       minOrcamentos: minOrcamentos(db),
+      superAdmin: ehSuperAdmin(u),
+      acessosPendentes: Number(u.nivel) >= 3 ? db.Usuarios.filter(function (x) { return x.status === 'pendente'; }).length : 0,
       requests: reqs,
       users: Number(u.nivel) >= 3 ? db.Usuarios.map(publico) : [],
       listas: listas(db),
@@ -381,15 +393,32 @@ var CVEngine = (function () {
           ux.nome = txt(x.nome); ux.email = email; ux.nivel = nv; ux.filial = txt(x.filial);
           if (txt(x.senha)) ux.senhaHash = ctx.hash(txt(x.senha));
         } else {
-          if (txt(x.senha).length < 4) erro('Defina uma senha inicial (mín. 4 caracteres).');
-          db.Usuarios.push({ id: ctx.uuid(), nome: txt(x.nome), email: email, senhaHash: ctx.hash(txt(x.senha)), nivel: nv, filial: txt(x.filial), ativo: true, criadoEm: agora() });
+          if (!emailAutorizado(email)) erro('E-mail não autorizado. Use um e-mail @' + DOMINIO_AUTORIZADO + '.');
+          if (txt(x.senha).length < 6) erro('Defina uma senha inicial (mín. 6 caracteres).');
+          db.Usuarios.push({ id: ctx.uuid(), nome: txt(x.nome), email: email, senhaHash: ctx.hash(txt(x.senha)), nivel: nv, filial: txt(x.filial), ativo: true, criadoEm: agora(), cpf: '', status: 'ativo', aprovadoPor: u.nome, aprovadoEm: agora(), obsAcesso: '' });
         }
         sujar(db, 'Usuarios');
         break;
       }
-      case 'toggleUser': { exigir(u, 3); var tu = porId(db.Usuarios, p.id); if (tu && tu.id !== u.id) { tu.ativo = !(tu.ativo !== false); sujar(db, 'Usuarios'); } break; }
-      case 'saveLimites': {
+      case 'toggleUser': { exigir(u, 3); var tu = porId(db.Usuarios, p.id); if (tu && tu.id !== u.id && tu.status !== 'pendente') { tu.ativo = !(tu.ativo !== false); tu.status = tu.ativo ? 'ativo' : 'inativo'; sujar(db, 'Usuarios'); } break; }
+      case 'aprovarAcesso': {
         exigir(u, 3);
+        var ua = porId(db.Usuarios, p.id); if (!ua || ua.status !== 'pendente') erro('Cadastro não encontrado ou já analisado.');
+        var nva = Number(p.nivel); if (!(nva >= 1 && nva <= 3)) erro('Escolha o perfil: Comprador, Supervisor ou Gerente.');
+        ua.nivel = nva; ua.filial = txt(p.filial) || ua.filial; ua.ativo = true; ua.status = 'ativo';
+        ua.aprovadoPor = u.nome; ua.aprovadoEm = agora(); ua.obsAcesso = '';
+        sujar(db, 'Usuarios'); extra.msg = ua.nome + ' aprovado como ' + NOMES[nva] + '.';
+        break;
+      }
+      case 'recusarAcesso': {
+        exigir(u, 3);
+        var ur = porId(db.Usuarios, p.id); if (!ur || ur.status !== 'pendente') erro('Cadastro não encontrado ou já analisado.');
+        ur.ativo = false; ur.status = 'recusado'; ur.aprovadoPor = u.nome; ur.aprovadoEm = agora(); ur.obsAcesso = txt(p.motivo);
+        sujar(db, 'Usuarios');
+        break;
+      }
+      case 'saveLimites': {
+        if (!ehSuperAdmin(u)) erro('Somente o administrador do sistema pode alterar alçadas e regras.');
         var a = Number(p.limites[1]), b = Number(p.limites[2]), c = Number(p.limites[3]);
         if (!(a > 0 && b > a && c > b)) erro('Os limites devem ser crescentes: Comprador < Supervisor < Gerente.');
         setCfg(db, 'limite_1', a); setCfg(db, 'limite_2', b); setCfg(db, 'limite_3', c);
@@ -418,9 +447,37 @@ var CVEngine = (function () {
     var e = norm(email), h = ctx.hash(txt(senha));
     for (var i = 0; i < db.Usuarios.length; i++) {
       var u = db.Usuarios[i];
-      if (norm(u.email) === e && u.senhaHash === h && u.ativo !== false) return u;
+      if (norm(u.email) !== e || u.senhaHash !== h) continue;
+      if (u.status === 'pendente') erro('Seu cadastro está aguardando aprovação de um gerente.');
+      if (u.status === 'recusado') erro('Seu cadastro não foi aprovado. Procure seu gestor.');
+      if (u.ativo === false) erro('Usuário inativo. Procure seu gestor.');
+      return u;
     }
     return null;
+  }
+
+  // ---------- primeiro acesso (sem login) ----------
+  function verificarEmail(db, email) {
+    var e = norm(email);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) erro('Digite um e-mail válido.');
+    var ex = db.Usuarios.filter(function (x) { return norm(x.email) === e; })[0];
+    return { email: e, autorizado: emailAutorizado(e), existe: !!ex, status: ex ? statusUsuario(ex) : '', nomeSugerido: EMAILS_EXTERNOS_AUTORIZADOS[e] || '' };
+  }
+  function solicitarAcesso(db, p, ctx) {
+    var v = verificarEmail(db, p.email);
+    if (!v.autorizado) erro('E-mail não autorizado. Use seu e-mail @' + DOMINIO_AUTORIZADO + '.');
+    if (v.existe) erro(v.status === 'pendente' ? 'Já existe uma solicitação para este e-mail aguardando aprovação.' : 'Este e-mail já possui cadastro. Use "Entrar".');
+    var nome = txt(p.nome).replace(/\s+/g, ' ');
+    if (nome.split(' ').length < 2) erro('Informe o nome completo (nome e sobrenome).');
+    var cpf = digitos(p.cpf);
+    if (!cpfValido(cpf)) erro('CPF inválido. Confira os números.');
+    if (db.Usuarios.some(function (x) { return digitos(x.cpf) === cpf; })) erro('Este CPF já está cadastrado.');
+    if (txt(p.senha).length < 6) erro('A senha precisa ter ao menos 6 caracteres.');
+    if (txt(p.senha) !== txt(p.confirmacao)) erro('A senha e a confirmação não são iguais.');
+    var novo = { id: ctx.uuid(), nome: nome, email: v.email, senhaHash: ctx.hash(txt(p.senha)), nivel: 0, filial: '', ativo: false, criadoEm: agora(),
+      cpf: formatarDoc(cpf), status: 'pendente', aprovadoPor: '', aprovadoEm: '', obsAcesso: '' };
+    db.Usuarios.push(novo); sujar(db, 'Usuarios');
+    return { ok: true, nome: nome, email: v.email, gerentes: db.Usuarios.filter(function (x) { return Number(x.nivel) >= 3 && x.ativo !== false && emailAutorizado(x.email); }).map(function (x) { return x.email; }) };
   }
 
   // ---------- dados iniciais ----------
@@ -465,7 +522,10 @@ var CVEngine = (function () {
     db.Listas = linhasListasPadrao();
     FORNECEDORES.forEach(function (f) { db.Fornecedores.push({ id: ctx.uuid(), nome: f[0], cnpj: '', contato: '', telefone: '', email: '', cidade: f[1], categorias: f[2], ativo: true, criadoEm: em }); });
     CATALOGO.forEach(function (c) { db.Itens.push({ id: ctx.uuid(), codigo: 'IT-' + pad(proximo(db, 'seq_item'), 4), descricao: c[0], unidade: c[1], categoria: c[2], fornecedorPreferido: c[3], ultimoPreco: '', ultimaCompra: '', ativo: true, criadoEm: em }); });
-    if (opcoes.demo) demo(db, ctx);
+    if (opcoes.demo) {
+      demo(db, ctx);
+      db.Usuarios.push({ id: ctx.uuid(), nome: 'João Pereira da Silva', email: 'joao.pereira@cheiroverdeambiental.com.br', senhaHash: ctx.hash('123456'), nivel: 0, filial: '', ativo: false, criadoEm: em, cpf: '111.444.777-35', status: 'pendente', aprovadoPor: '', aprovadoEm: '', obsAcesso: '' });
+    }
     db._dirty = null;
     return db;
   }
@@ -504,7 +564,7 @@ var CVEngine = (function () {
   return {
     TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA,
     linhasListasPadrao: linhasListasPadrao, listas: listas, cnpjValido: cnpjValido, cpfValido: cpfValido, digitos: digitos, formatarDoc: formatarDoc, normalizarCnpj: normalizarCnpj,
-    novoDb: novoDb, seed: seed, login: login, handle: handle, estado: estado,
+    novoDb: novoDb, seed: seed, login: login, verificarEmail: verificarEmail, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, norm: norm, r2: r2
   };
 })();

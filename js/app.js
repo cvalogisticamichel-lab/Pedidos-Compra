@@ -70,6 +70,8 @@
     trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
     sync: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
     clip: '<path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
+    user: '<circle cx="9" cy="8" r="4"/><path d="M2 21v-1a7 7 0 0 1 14 0v1"/><path d="M19 8v6M16 11h6"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
     file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>'
   };
   const icon = (n, s) => `<svg viewBox="0 0 24 24" width="${s || 20}" height="${s || 20}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
@@ -81,7 +83,7 @@
     { id: 'solicitacoes', nome: 'Solicitações', curto: 'Pedidos', icon: 'list', nivel: 1 },
     { id: 'aprovacoes', nome: 'Aprovações', icon: 'check', nivel: 2 },
     { id: 'cadastros', nome: 'Itens e fornecedores', curto: 'Cadastros', icon: 'box', nivel: 1 },
-    { id: 'dashboard', nome: 'Dashboard', icon: 'chart', nivel: 2 },
+    { id: 'acessos', nome: 'Acessos', icon: 'user', nivel: 3 },
     { id: 'config', nome: 'Configurações', curto: 'Config.', icon: 'cog', nivel: 3 }
   ];
   function rotaAtual() {
@@ -110,18 +112,18 @@
     root.innerHTML = `
     <div class="login-wrap">
       <section class="login-hero">
-        <div class="logo-img">${M.logo(true)}</div>
-        <div>
+        <div class="hero-centro">
+          <div class="hero-logo">${M.carregando(false)}</div>
           <h1>Pedidos de compra com agilidade e controle.</h1>
-          <p>Solicite, aprove dentro da sua alçada e acompanhe cada compra da Cheiro Verde Ambiental em um só lugar.</p>
+          <p>Solicite, aprove dentro da sua alçada e acompanhe cada compra em um só lugar.</p>
         </div>
-        <p class="small">© ${new Date().getFullYear()} ${esc(C.empresa)}</p>
+        <p class="small hero-rodape">© ${new Date().getFullYear()} ${esc(C.empresa)}</p>
       </section>
       <section class="login-form">
         <form class="login-card" id="fLogin" autocomplete="on">
-          <div class="logo-img">${M.logo(false)}</div>
+          <div class="logo-mobile">${M.carregando(false)}</div>
           <h1>Entrar</h1>
-          <p class="muted">Acesse com seu e-mail corporativo.</p>
+          <p class="muted">Acesse com seu e-mail @${esc(S.dominio)}.</p>
           <div class="field"><label for="email">E-mail</label><input id="email" type="email" required autocomplete="username"></div>
           <div class="field"><label for="senha">Senha</label><input id="senha" type="password" required autocomplete="current-password"></div>
           <div class="erro-msg" id="erro">${esc(msgErro || '')}</div>
@@ -134,7 +136,9 @@
           </div>` : `<p class="small muted" style="margin-top:16px">Conectado à base Google da empresa.</p>`}
         </form>
       </section>
+      <button type="button" class="btn btn-accent btn-primeiro-acesso" id="btnPrimeiro">${icon('plus', 18)} Solicitar primeiro acesso</button>
     </div>`;
+    document.getElementById('btnPrimeiro').onclick = primeiroAcesso;
     const f = document.getElementById('fLogin');
     f.addEventListener('submit', async e => {
       e.preventDefault();
@@ -157,6 +161,84 @@
     }));
   }
 
+  // ========== PRIMEIRO ACESSO ==========
+  const mascaraCpf = v => { const d = S.digitos(v).slice(0, 11); return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2'); };
+  function primeiroAcesso() {
+    abrirGaveta(`
+      <div class="card-head" style="margin:0"><div><div class="small muted">Cheiro Verde Ambiental</div><h1>Solicitar primeiro acesso</h1></div>${btnFechar}</div>
+      <div id="paPasso"></div>`, (bg, fechar) => {
+      const box = bg.querySelector('#paPasso');
+      const passoEmail = (erroMsg, valor) => {
+        box.innerHTML = `<form id="paEmail" class="pa-form">
+          <div class="pa-etapas"><span class="on">1 · E-mail</span><span>2 · Cadastro</span><span>3 · Aprovação</span></div>
+          <p class="muted">Informe seu e-mail corporativo <b>@${esc(S.dominio)}</b>.</p>
+          <div class="field"><label>E-mail *</label><input name="email" type="email" required autocomplete="email" value="${esc(valor || '')}" placeholder="nome@${esc(S.dominio)}"></div>
+          <div class="erro-msg">${esc(erroMsg || '')}</div>
+          <button class="btn btn-primary" style="width:100%">Continuar</button>
+        </form>`;
+        const fe = box.querySelector('#paEmail'); fe.email.focus();
+        fe.addEventListener('submit', async e => {
+          e.preventDefault();
+          const b = fe.querySelector('button'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Verificando…';
+          try {
+            const v = await S.verificarEmail(fe.email.value);
+            if (!v.autorizado) return passoEmail(`E-mail não autorizado. O cadastro é permitido apenas para e-mails @${S.dominio}.`, fe.email.value);
+            if (v.existe) return passoEmail(v.status === 'pendente' ? 'Já existe uma solicitação para este e-mail aguardando aprovação de um gerente.' : 'Este e-mail já possui cadastro. Feche esta janela e use "Entrar".', fe.email.value);
+            passoCadastro(v);
+          } catch (err) { passoEmail(err.message, fe.email.value); }
+        });
+      };
+      const passoCadastro = v => {
+        box.innerHTML = `<form id="paCad" class="pa-form" autocomplete="off">
+          <div class="pa-etapas"><span class="ok">1 · E-mail</span><span class="on">2 · Cadastro</span><span>3 · Aprovação</span></div>
+          <div class="pa-email">${icon('check', 16)} ${esc(v.email)} <button type="button" class="btn-mini" id="paTroca">trocar</button></div>
+          <div class="field"><label>Nome completo *</label><input name="nome" required value="${esc(v.nomeSugerido || '')}" placeholder="Nome e sobrenome"></div>
+          <div class="field"><label>CPF *</label><input name="cpf" required inputmode="numeric" placeholder="000.000.000-00" maxlength="14"><div class="campo-hint" id="cpfHint"></div></div>
+          <div class="grid g2">
+            <div><label>Senha * <span class="muted small">(mín. 6)</span></label><input name="senha" type="password" required minlength="6" autocomplete="new-password"></div>
+            <div><label>Confirmar senha *</label><input name="confirmacao" type="password" required autocomplete="new-password"></div>
+          </div>
+          <div class="campo-hint" id="senhaHint"></div>
+          <div class="erro-msg" id="paErro"></div>
+          <button class="btn btn-primary" style="width:100%" id="paEnviar" disabled>Enviar cadastro para aprovação</button>
+        </form>`;
+        const fc = box.querySelector('#paCad');
+        box.querySelector('#paTroca').onclick = () => passoEmail('', v.email);
+        const validar = () => {
+          const cpf = S.digitos(fc.cpf.value), okCpf = S.cpfValido(cpf);
+          box.querySelector('#cpfHint').innerHTML = cpf.length < 11 ? '' : okCpf ? '<span class="ok">✓ CPF válido</span>' : '<span class="warn">CPF inválido</span>';
+          const s1 = fc.senha.value, s2 = fc.confirmacao.value;
+          const okSenha = s1.length >= 6 && s1 === s2;
+          box.querySelector('#senhaHint').innerHTML = !s2 ? '' : s1 !== s2 ? '<span class="warn">As senhas não são iguais</span>' : s1.length < 6 ? '<span class="warn">A senha precisa ter ao menos 6 caracteres</span>' : '<span class="ok">✓ As senhas conferem</span>';
+          const okNome = fc.nome.value.trim().split(/\s+/).length >= 2;
+          fc.querySelector('#paEnviar').disabled = !(okCpf && okSenha && okNome);
+        };
+        fc.cpf.addEventListener('input', () => { fc.cpf.value = mascaraCpf(fc.cpf.value); validar(); });
+        ['nome', 'senha', 'confirmacao'].forEach(k => fc[k].addEventListener('input', validar));
+        (v.nomeSugerido ? fc.cpf : fc.nome).focus();
+        fc.addEventListener('submit', async e => {
+          e.preventDefault();
+          const b = fc.querySelector('#paEnviar'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Enviando…';
+          mostrarCarregando('Enviando cadastro…');
+          try {
+            const r = await S.solicitarAcesso({ email: v.email, nome: fc.nome.value, cpf: fc.cpf.value, senha: fc.senha.value, confirmacao: fc.confirmacao.value });
+            esconderCarregando();
+            passoFim(r);
+          } catch (err) { esconderCarregando(); box.querySelector('#paErro').textContent = err.message; b.disabled = false; b.textContent = 'Enviar cadastro para aprovação'; }
+        });
+      };
+      const passoFim = r => {
+        box.innerHTML = `<div class="pa-form">
+          <div class="pa-etapas"><span class="ok">1 · E-mail</span><span class="ok">2 · Cadastro</span><span class="on">3 · Aprovação</span></div>
+          <div class="pa-sucesso">${icon('check', 40)}<h2>Cadastro enviado!</h2>
+          <p>Obrigado, <b>${esc(r.nome.split(' ')[0])}</b>. Sua solicitação foi enviada aos gerentes. Assim que um gerente aprovar e definir o seu perfil, você poderá entrar com o e-mail <b>${esc(r.email)}</b> e a senha cadastrada.</p></div>
+          <button type="button" class="btn btn-primary" style="width:100%" data-close>Voltar para o login</button>
+        </div>`;
+      };
+      passoEmail();
+    });
+  }
+
   // ========== SHELL ==========
   function render() {
     const u = S.user();
@@ -167,13 +249,14 @@
     const disp = ROTAS.filter(r => u.nivel >= r.nivel);
     const r = disp.find(x => x.id === rota.id) || disp[0];
     const nPend = pendentesParaMim(u).length;
+    const nAcessos = u.nivel >= 3 ? S.acessosPendentes() : 0;
 
     root.innerHTML = `
     <div class="app">
       <aside class="sidebar">
         <div class="brand">${M.logo(true)}</div>
         <nav class="nav">
-          ${disp.map(x => `<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}</a>`).join('')}
+          ${disp.map(x => `<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}${x.id === 'acessos' && nAcessos ? `<span class="badge">${nAcessos}</span>` : ''}</a>`).join('')}
         </nav>
         <div class="foot">${esc(C.sistema)} v${esc(C.versao)}<br>${S.modo === 'google' ? '● Conectado ao Google' : '○ Modo demonstração'}</div>
       </aside>
@@ -182,6 +265,7 @@
           <div class="mobile-brand">${M.logo(false)}</div>
           <h2 class="page-title-desk">${esc(r.nome)}</h2>
           <div class="user-chip">
+            ${u.nivel >= 3 ? `<a class="btn btn-ghost btn-sm sino${nAcessos ? ' tem' : ''}" href="#/acessos" title="${nAcessos ? nAcessos + ' cadastro(s) aguardando aprovação' : 'Sem novos cadastros'}">${icon('bell', 18)}${nAcessos ? `<span class="sino-n">${nAcessos}</span>` : ''}</a>` : ''}
             <button class="btn btn-ghost btn-sm" id="btnSync" title="Atualizar dados">${icon('sync', 18)}</button>
             <div class="who"><b>${esc(u.nome)}</b><span class="nivel-tag">Nível 0${u.nivel} · ${esc(S.nomeNivel(u.nivel))}</span></div>
             <button class="avatar" id="btnPerfil" title="Minha conta">${iniciais(u.nome)}</button>
@@ -196,7 +280,7 @@
     document.getElementById('btnPerfil').onclick = abrirPerfil;
 
     const view = document.getElementById('view');
-    ({ inicio: vInicio, nova: vNova, solicitacoes: vLista, aprovacoes: vAprovacoes, cadastros: vCadastros, dashboard: vDashboard, config: vConfig }[r.id])(view, u, rota.param);
+    ({ inicio: vInicio, nova: vNova, solicitacoes: vLista, aprovacoes: vAprovacoes, cadastros: vCadastros, acessos: vAcessos, config: vConfig }[r.id])(view, u, rota.param);
   }
 
   // Atualiza sozinho ao voltar para a aba (modo Google)
@@ -255,6 +339,7 @@
         <div><h1>Olá, ${esc(u.nome.split(' ')[0])}!</h1><p>Resumo das suas solicitações de compra.</p></div>
         <a class="btn btn-accent" href="#/nova">${icon('plus', 18)} Nova solicitação</a>
       </div>
+      ${u.nivel >= 3 && S.acessosPendentes() ? `<a class="aviso-acesso" href="#/acessos">${icon('bell', 20)}<div><b>${S.acessosPendentes()} novo(s) cadastro(s) aguardando sua aprovação</b><div class="small">Defina o perfil (Comprador, Supervisor ou Gerente) para liberar o acesso.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
       <div class="kpis">
         <div class="kpi destaque"><div class="lbl">Sua alçada</div><div class="val">${brl(lim[u.nivel])}</div><div class="sub">Aprova sozinho até este valor</div></div>
         <div class="kpi"><div class="lbl">Minhas pendentes</div><div class="val">${minhas.filter(r => r.status === 'pendente').length}</div><div class="sub">aguardando aprovação</div></div>
@@ -1066,6 +1151,54 @@
     pintar();
   }
 
+  // ========== ACESSOS (Gerente aprova novos cadastros) ==========
+  function vAcessos(el, u) {
+    const todos = S.listUsers();
+    const pend = todos.filter(x => x.status === 'pendente').sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm)));
+    const hist = todos.filter(x => x.aprovadoEm && x.status !== 'pendente').sort((a, b) => String(b.aprovadoEm).localeCompare(String(a.aprovadoEm))).slice(0, 12);
+    const L = S.listas();
+    el.innerHTML = `
+      <div class="page-head"><div><h1>Acessos</h1><p>Novos cadastros aguardando aprovação. Escolha o perfil de cada pessoa para liberar o acesso.</p></div></div>
+      ${pend.length ? `<div class="acessos-lista">${pend.map(x => `<div class="card acesso" data-id="${x.id}">
+        <div class="acesso-topo">
+          <div class="avatar">${iniciais(x.nome)}</div>
+          <div class="acesso-quem"><b>${esc(x.nome)}</b><div class="small muted">${esc(x.email)}</div></div>
+          <span class="status st-pendente">Aguardando</span>
+        </div>
+        <div class="acesso-dados">
+          <div><span>CPF</span>${esc(x.cpf || '—')}</div>
+          <div><span>Solicitado em</span>${dataHora(x.criadoEm)}</div>
+        </div>
+        <div class="grid g2 acesso-form">
+          <div><label>Perfil do usuário *</label><select name="nivel" required><option value="">Selecione o perfil…</option>${[1, 2, 3].map(n => `<option value="${n}">Nível 0${n} — ${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+          <div><label>Filial</label><select name="filial"><option value="">—</option>${opts(L.filial)}</select></div>
+        </div>
+        <div class="acoes" style="margin-top:12px">
+          <button class="btn btn-primary" data-aprovar>${icon('check', 16)} Aprovar acesso</button>
+          <button class="btn btn-danger" data-recusar>Recusar</button>
+        </div>
+      </div>`).join('')}</div>`
+      : `<div class="card"><div class="empty">${icon('check', 28)}<p>Nenhum cadastro aguardando aprovação.</p></div></div>`}
+      ${hist.length ? `<div class="card"><div class="card-head"><h2>Últimas análises</h2></div><div class="table-wrap"><table>
+        <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Resultado</th><th class="hide-sm">Por</th><th class="hide-sm">Em</th></tr></thead>
+        <tbody>${hist.map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td>
+          <td>${x.status === 'recusado' ? `<span class="status st-reprovado">Recusado</span>${x.obsAcesso ? `<div class="small muted">${esc(x.obsAcesso)}</div>` : ''}` : `<span class="nivel-tag">N0${x.nivel} · ${esc(S.nomeNivel(x.nivel))}</span>`}</td>
+          <td class="hide-sm">${esc(x.aprovadoPor)}</td><td class="hide-sm num">${dataHora(x.aprovadoEm)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+    el.querySelectorAll('.acesso').forEach(c => {
+      const id = c.dataset.id;
+      c.querySelector('[data-aprovar]').onclick = e => {
+        const nivel = c.querySelector('[name=nivel]').value;
+        if (!nivel) { toast('Escolha o perfil do usuário antes de aprovar.', true); c.querySelector('[name=nivel]').focus(); return; }
+        executar(e.currentTarget, () => S.act('aprovarAcesso', { id, nivel, filial: c.querySelector('[name=filial]').value }), j => j.state.extra.msg || 'Acesso aprovado.');
+      };
+      c.querySelector('[data-recusar]').onclick = e => {
+        const motivo = prompt('Motivo da recusa (opcional):', '');
+        if (motivo === null) return;
+        executar(e.currentTarget, () => S.act('recusarAcesso', { id, motivo }), 'Cadastro recusado.');
+      };
+    });
+  }
+
   // ========== CONFIGURAÇÕES (Gerente) ==========
   function vConfig(el, u) {
     const lim = S.limites();
@@ -1094,21 +1227,21 @@
         </div>`).join('')}</div>
         <p class="small muted" style="margin:10px 0 0">Esses valores aparecem como opções na Nova solicitação e como listas suspensas na planilha. Remover um valor não altera pedidos já feitos.</p>
       </div>
-      <div class="card">
-        <div class="card-head"><h2>Alçadas e regras</h2></div>
+      ${S.superAdmin() ? `<div class="card">
+        <div class="card-head"><h2>Alçadas e regras</h2><span class="small muted">visível só para o administrador</span></div>
         <form id="fLim" class="grid g4" style="align-items:end">
           ${[1, 2, 3].map(n => `<div><label>Nível 0${n} — ${esc(S.nomeNivel(n))} (R$)</label><input type="number" min="1" step="0.01" name="l${n}" value="${lim[n]}"></div>`).join('')}
           <div><button class="btn btn-primary" style="width:100%">Salvar</button></div>
           <div><label>Mínimo de orçamentos por solicitação</label><input type="number" min="0" max="10" step="1" name="minOrc" value="${S.minOrcamentos()}"></div>
         </form>
         <p class="small muted" style="margin:10px 0 0">Acima do limite do Gerente, o pedido fica aguardando <b>${esc(C.instanciaSuperior)}</b>. Novos limites valem para novas solicitações.</p>
-      </div>
+      </div>` : ''}
       <div class="card">
-        <div class="card-head"><h2>Usuários</h2><button class="btn btn-accent btn-sm" id="novoU">${icon('plus', 16)} Novo usuário</button></div>
+        <div class="card-head"><h2>Usuários</h2>${S.acessosPendentes() ? `<a href="#/acessos" class="btn-mini laranja">${S.acessosPendentes()} aguardando aprovação</a>` : ''}<button class="btn btn-accent btn-sm" id="novoU">${icon('plus', 16)} Novo usuário</button></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Nível</th><th class="hide-sm">Filial</th><th>Status</th><th></th></tr></thead>
-          <tbody>${users.map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td><span class="nivel-tag">N0${x.nivel} · ${esc(S.nomeNivel(x.nivel))}</span></td><td class="hide-sm">${esc(x.filial)}</td>
-            <td>${x.ativo ? '<span class="status st-aprovado">Ativo</span>' : '<span class="status st-cancelado">Inativo</span>'}</td>
+          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">N0${x.nivel} · ${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td class="hide-sm">${esc(x.filial)}</td>
+            <td>${x.status === 'recusado' ? '<span class="status st-reprovado">Recusado</span>' : x.ativo ? '<span class="status st-aprovado">Ativo</span>' : '<span class="status st-cancelado">Inativo</span>'}</td>
             <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${x.id}">Editar</button> ${x.id !== u.id ? `<button class="btn btn-ghost btn-sm" data-tg="${x.id}">${x.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}</td></tr>`).join('')}</tbody>
         </table></div>
         <form id="fUser" class="hidden" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:16px">
@@ -1140,7 +1273,7 @@
       if (!v || !confirm(`Remover "${v}" da lista de ${NOME_LISTA[b.dataset.rml]}?`)) return;
       executar(b, () => S.act('removeLista', { tipo: b.dataset.rml, valor: v }), 'Valor removido.');
     });
-    el.querySelector('#fLim').addEventListener('submit', e => {
+    if (el.querySelector('#fLim')) el.querySelector('#fLim').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
       executar(f.querySelector('button'), () => S.act('saveLimites', { limites: { 1: f.l1.value, 2: f.l2.value, 3: f.l3.value }, minOrcamentos: f.minOrc.value }), 'Limites atualizados.');
     });

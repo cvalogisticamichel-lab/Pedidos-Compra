@@ -46,6 +46,11 @@
         return { token: u.id, state: Object.assign(E.estado(db, u), { extra: { modo: 'local' } }) };
       }
       if (action === 'logout') return { ok: true };
+      if (action === 'verificarEmail') return { dados: E.verificarEmail(db, p.email) };
+      if (action === 'solicitarAcesso') {
+        try { const r = E.solicitarAcesso(db, p, this.ctx); this.save(); return { dados: { nome: r.nome, email: r.email } }; }
+        catch (e) { this.db = null; throw e; }
+      }
       const u = db.Usuarios.find(x => x.id === p.token && x.ativo !== false);
       if (!u) { const e = new Error('Sessão expirada. Entre novamente.'); e.sessao = false; throw e; }
       let a = action;
@@ -134,6 +139,12 @@
       token = null; st = null; ls.del(K_TOKEN);
     },
     user: () => (st ? st.user : null),
+    superAdmin: () => !!(st && st.superAdmin),
+    acessosPendentes: () => (st ? Number(st.acessosPendentes) || 0 : 0),
+    emailAutorizado: E.emailAutorizado,
+    dominio: E.DOMINIO_AUTORIZADO,
+    async verificarEmail(email) { const j = await call('verificarEmail', { email }); return j.dados; },
+    async solicitarAcesso(dados) { const j = await call('solicitarAcesso', dados); return j.dados; },
     extra: () => (st ? st.extra || {} : {}),
     refresh: () => call('state'),
     act: (action, payload) => call(action, payload),

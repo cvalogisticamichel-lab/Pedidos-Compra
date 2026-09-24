@@ -351,3 +351,49 @@ button.link { background: none; border: 0; padding: 0; font: inherit; font-weigh
   .orc-linha { grid-template-columns: 28px 1fr; }
   .orc-linha > div:not(.n), .orc-linha > button { grid-column: 2; }
 }
+
+/* ---------- v2.4: login com logo animada, primeiro acesso, aprovação ---------- */
+.login-wrap { grid-template-columns: 1.25fr 1fr; position: relative; }
+.login-hero { background: radial-gradient(120% 90% at 30% 35%, #ffffff 0%, #f1f8f2 55%, #e2f1e6 100%); color: var(--tinta); justify-content: center; align-items: center; text-align: center; border-right: 1px solid var(--linha); }
+.login-hero::after { right: -140px; bottom: -160px; width: 420px; height: 420px; background: radial-gradient(circle, rgba(92, 195, 0, .16), rgba(92, 195, 0, 0) 70%); }
+.login-hero::before { content: ''; position: absolute; left: -120px; top: -120px; width: 360px; height: 360px; border-radius: 50%; background: radial-gradient(circle, rgba(0, 147, 52, .10), rgba(0, 147, 52, 0) 70%); }
+.hero-centro { position: relative; z-index: 1; width: 100%; max-width: 640px; display: flex; flex-direction: column; align-items: center; }
+.hero-logo { width: min(600px, 92%); margin-bottom: 28px; }
+.hero-logo .cv-loader { width: 100%; height: auto; display: block; shape-rendering: geometricPrecision; }
+.login-hero h1 { color: var(--verde-900); font-size: 1.9rem; max-width: 520px; }
+.login-hero p { color: var(--tinta-2); opacity: 1; max-width: 480px; margin: 10px auto 0; }
+.hero-rodape { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; color: var(--tinta-3) !important; }
+.logo-mobile { display: none; width: 260px; margin: 0 auto 20px; }
+.logo-mobile .cv-loader { width: 100%; height: auto; display: block; }
+.btn-primeiro-acesso { position: fixed; right: 24px; bottom: 24px; z-index: 30; box-shadow: 0 8px 24px rgba(255, 147, 2, .35); padding: 12px 20px; }
+.pa-form { margin-top: 16px; }
+.pa-etapas { display: flex; gap: 6px; margin-bottom: 18px; }
+.pa-etapas span { flex: 1; text-align: center; font-size: .78rem; font-weight: 700; padding: 6px 4px; border-radius: 99px; background: var(--neutro-bg); color: var(--tinta-3); }
+.pa-etapas span.on { background: var(--verde-700); color: #fff; }
+.pa-etapas span.ok { background: var(--verde-100); color: var(--verde-700); }
+.pa-email { display: flex; align-items: center; gap: 8px; background: var(--verde-50); border: 1px solid var(--verde-100); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; font-weight: 600; color: var(--verde-700); word-break: break-all; }
+.pa-email .btn-mini { margin-left: auto; }
+.pa-sucesso { text-align: center; padding: 20px 8px; color: var(--verde-700); }
+.pa-sucesso h2 { margin: 10px 0 8px; font-size: 1.3rem; }
+.pa-sucesso p { color: var(--tinta-2); }
+.sino { position: relative; }
+.sino.tem { border-color: var(--laranja); color: #b36400; }
+.sino-n { position: absolute; top: -6px; right: -6px; background: var(--laranja); color: #fff; font-size: .68rem; font-weight: 700; border-radius: 99px; padding: 1px 6px; line-height: 1.4; }
+.aviso-acesso { display: flex; align-items: center; gap: 14px; text-decoration: none; color: #8a4f00; background: var(--laranja-100); border: 1px solid #ffd49a; border-radius: var(--raio); padding: 14px 18px; margin-bottom: 16px; }
+.aviso-acesso > div { flex: 1; }
+.aviso-acesso:hover { border-color: var(--laranja); }
+.acessos-lista { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.acessos-lista .card + .card { margin-top: 0; }
+.acesso-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.acesso-quem { flex: 1; min-width: 0; word-break: break-all; }
+.acesso-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: .9rem; margin-bottom: 12px; }
+.acesso-dados span { display: block; font-size: .72rem; color: var(--tinta-3); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.empty svg { color: var(--verde-500); }
+@media (max-width: 1000px) { .acessos-lista { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .login-card .logo-img { display: none; }
+  .logo-mobile { display: block; }
+  .btn-primeiro-acesso { left: 16px; right: 16px; bottom: 16px; justify-content: center; }
+  .login-form { padding-bottom: 90px; }
+}
+@media (max-width: 760px) { .login-wrap { grid-template-columns: 1fr; } }
