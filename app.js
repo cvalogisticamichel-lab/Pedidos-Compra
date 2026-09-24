@@ -1659,7 +1659,7 @@
           ${x.departamento ? `<div><span>Departamento informado</span>${esc(x.departamento)}</div>` : ''}
         </div>
         <div class="grid g3 acesso-form">
-          <div><label>Perfil do usuário *</label><select name="nivel" required><option value="">Selecione o perfil…</option>${NIVEIS_PERFIL.map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
+          <div><label>Perfil do usuário *</label>${S.superAdmin() ? `<select name="nivel" required><option value="">Selecione o perfil…</option>${NIVEIS_PERFIL.map(n => `<option value="${n}">${esc(S.nomeNivel(n))}</option>`).join('')}</select>` : `<select name="nivel"><option value="1">Comprador</option></select><div class="campo-hint muted">Outro perfil: peça ao administrador master depois da liberação.</div>`}</div>
           <div><label>Departamento *</label><select name="departamento" required><option value="">Selecione…</option>${opts(L.departamento || [], x.departamento)}</select></div>
           <div><label>Filial</label><select name="filial"><option value="">—</option>${opts(L.filial)}</select></div>
         </div>
@@ -1743,12 +1743,13 @@
       </div>
       <div class="card">
         <div class="card-head"><h2>Usuários</h2>${S.acessosPendentes() ? `<a href="#/acessos" class="btn-mini laranja">${S.acessosPendentes()} aguardando aprovação</a>` : ''}<button class="btn btn-accent btn-sm" id="novoU">${icon('plus', 16)} Novo usuário</button></div>
+        <p class="small muted" style="margin:-6px 0 10px">${S.superAdmin() ? `Você é o <b>administrador master</b>: use o botão <b>Acesso</b> para definir o perfil (Comprador, Supervisor, Gerente ou Financeiro) e o departamento de cada pessoa.` : `O tipo de acesso e o departamento dos usuários só podem ser alterados pelo administrador master.`}</p>
         <div class="table-wrap"><table>
           <thead><tr><th>Nome</th><th class="hide-sm">E-mail</th><th>Perfil</th><th>Departamento</th><th class="hide-sm">Filial</th><th>Assinatura</th><th>Status</th><th></th></tr></thead>
-          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b></td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td>${esc(x.departamento || '—')}</td><td class="hide-sm">${esc(x.filial)}</td>
+          <tbody>${users.filter(x => x.status !== 'pendente').map(x => `<tr><td><b>${esc(x.nome)}</b>${x.master ? ' <span class="tag-master">Master</span>' : ''}</td><td class="hide-sm">${esc(x.email)}</td><td>${x.nivel ? `<span class="nivel-tag">${esc(S.nomeNivel(x.nivel))}</span>` : '—'}</td><td>${esc(x.departamento || '—')}</td><td class="hide-sm">${esc(x.filial)}</td>
             <td>${x.temAssinatura ? '<span class="status st-aprovado">Cadastrada</span>' : '<span class="status st-pendente">Pendente</span>'}<div><button class="btn-mini" data-lk="${x.id}" title="Gerar link para a pessoa assinar">${icon('link', 12)} ${x.temAssinatura ? 'Novo link' : 'Gerar link'}</button></div></td>
             <td>${x.status === 'recusado' ? '<span class="status st-reprovado">Recusado</span>' : x.ativo ? '<span class="status st-aprovado">Ativo</span>' : '<span class="status st-cancelado">Inativo</span>'}</td>
-            <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ed="${x.id}">Editar</button> ${x.id !== u.id ? `<button class="btn btn-ghost btn-sm" data-tg="${x.id}">${x.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}</td></tr>`).join('')}</tbody>
+            <td style="white-space:nowrap">${S.superAdmin() ? `<button class="btn btn-primary btn-sm" data-acesso="${x.id}" title="Alterar tipo de acesso">${icon('shield', 14)} Acesso</button> ` : ''}${S.superAdmin() || x.id === u.id || (Number(x.nivel) < 3 && !x.master) ? `<button class="btn btn-ghost btn-sm" data-ed="${x.id}">Editar</button> ` : ''}${x.id !== u.id && !x.master && (S.superAdmin() || Number(x.nivel) < 3) ? `<button class="btn btn-ghost btn-sm" data-tg="${x.id}">${x.ativo ? 'Desativar' : 'Ativar'}</button>` : ''}</td></tr>`).join('')}</tbody>
         </table></div>
         <form id="fUser" class="hidden" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:16px">
           <input type="hidden" name="id">
@@ -1794,12 +1795,17 @@
       fU.filial.innerHTML = opts(fl.includes(atual) || !atual ? fl : fl.concat([atual]), atual);
       const dl = S.listas().departamento || [], dAt = x ? x.departamento || '' : '';
       fU.departamento.innerHTML = '<option value="">—</option>' + opts(dl.includes(dAt) || !dAt ? dl : dl.concat([dAt]), dAt);
+      const podeAcesso = S.superAdmin();   // perfil e departamento: só o master
+      fU.nivel.disabled = fU.departamento.disabled = !podeAcesso;
+      if (!podeAcesso && !x) fU.nivel.value = 1;
+      fU.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.querySelector('#senhaHint').textContent = x ? '(deixe em branco para manter)' : '*';
       fU.nome.focus();
     };
     el.querySelector('#novoU').onclick = () => abrirForm(null);
     el.querySelector('#cancU').onclick = () => fU.classList.add('hidden');
     el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => abrirForm(users.find(x => x.id === b.dataset.ed)));
+    el.querySelectorAll('[data-acesso]').forEach(b => b.onclick = () => abrirTipoAcesso(users.find(x => x.id === b.dataset.acesso)));
     el.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => executar(b, () => S.act('toggleUser', { id: b.dataset.tg }), 'Usuário atualizado.'));
     el.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => executar(b, () => S.act('gerarLinkAssinatura', { id: b.dataset.lk }), null, j => { render(); mostrarLinkAssinatura(j.state.extra.nome, j.state.extra.token); }));
     fU.addEventListener('submit', e => {
@@ -1811,6 +1817,39 @@
     el.querySelector('#bExp').onclick = () => download('pedidos-compra-completo.json', S.exportJSON(), 'application/json');
     const br = el.querySelector('#bReset');
     if (br) br.onclick = () => { if (!confirm('Apagar todos os dados e restaurar a demonstração?')) return; S.resetDemo(); toast('Dados de demonstração restaurados.'); render(); };
+  }
+
+  // ---------- Tipo de acesso (exclusivo do administrador master) ----------
+  const DESC_PERFIL = {
+    1: 'Cria solicitações e vê apenas as próprias. Aprova sozinho dentro da alçada de Comprador.',
+    2: 'Vê e autoriza as solicitações do seu departamento, dentro da alçada de Supervisor.',
+    3: 'Vê todas as solicitações e autoriza até o teto do seu departamento. Credencia fornecedores e libera acessos.',
+    5: 'Somente consulta: vê todas as solicitações, cadastros e PDFs, sem alterar nada.'
+  };
+  function abrirTipoAcesso(x) {
+    if (!x) return;
+    const dl = S.listas().departamento || [];
+    abrirGaveta(`
+      <div class="card-head" style="margin:0"><div><div class="small muted">Tipo de acesso</div><h1>${esc(x.nome)}</h1><div class="small muted">${esc(x.email)}</div></div>${btnFechar}</div>
+      <form id="fAcesso" style="margin-top:16px">
+        <div class="perfis-opcoes">${NIVEIS_PERFIL.map(n => `<label class="perfil-op${Number(x.nivel) === n ? ' on' : ''}${x.master && n !== 3 ? ' bloq' : ''}">
+          <input type="radio" name="nivel" value="${n}" ${Number(x.nivel) === n ? 'checked' : ''} ${x.master && n !== 3 ? 'disabled' : ''}>
+          <div><b>${esc(S.nomeNivel(n))}</b><div class="small muted">${esc(DESC_PERFIL[n])}</div></div></label>`).join('')}</div>
+        <div class="grid g2" style="margin-top:14px">
+          <div><label>Departamento</label><select name="departamento"><option value="">—</option>${opts(dl.includes(x.departamento) || !x.departamento ? dl : dl.concat([x.departamento]), x.departamento || '')}</select></div>
+          <div><label>Situação</label><select name="ativo" ${x.master ? 'disabled' : ''}><option value="1" ${x.ativo ? 'selected' : ''}>Ativo</option><option value="0" ${x.ativo ? '' : 'selected'}>Inativo (sem acesso)</option></select></div>
+        </div>
+        ${x.master ? '<p class="small muted">Este é o administrador master: continua sempre como Gerente e ativo.</p>' : ''}
+        <div class="acoes" style="margin-top:16px"><button class="btn btn-primary">${icon('shield', 16)} Salvar tipo de acesso</button><button type="button" class="btn btn-ghost" data-close>Cancelar</button></div>
+      </form>`, (bg, fechar) => {
+      const f = bg.querySelector('#fAcesso');
+      f.querySelectorAll('input[name=nivel]').forEach(r => r.addEventListener('change', () => f.querySelectorAll('.perfil-op').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
+      f.addEventListener('submit', e => {
+        e.preventDefault();
+        const nivel = (f.querySelector('input[name=nivel]:checked') || {}).value;
+        executar(f.querySelector('.btn-primary'), () => S.act('alterarAcesso', { id: x.id, nivel, departamento: f.departamento.value, ativo: f.ativo.value === '1' }), j => j.state.extra.msg || 'Tipo de acesso atualizado.', () => { fechar(); render(); });
+      });
+    });
   }
 
   // ========== INÍCIO DO APP ==========
