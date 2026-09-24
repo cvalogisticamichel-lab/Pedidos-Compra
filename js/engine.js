@@ -16,7 +16,8 @@ var CVEngine = (function () {
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
     Itens: ['id', 'codigo', 'descricao', 'unidade', 'categoria', 'fornecedorPreferido', 'ultimoPreco', 'ultimaCompra', 'ativo', 'criadoEm'],
-    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm'],
+    Fornecedores: ['id', 'nome', 'cnpj', 'contato', 'telefone', 'email', 'cidade', 'categorias', 'ativo', 'criadoEm', 'nomeFantasia', 'endereco', 'uf', 'cep', 'situacao', 'atividade'],
+    Listas: ['filial', 'centroCusto', 'categoria', 'unidade'],
     Historico_Precos: ['em', 'itemId', 'codigo', 'descricao', 'fornecedor', 'unidade', 'qtd', 'valorUnit', 'numero', 'solicitacaoId'],
     Usuarios: ['id', 'nome', 'email', 'senhaHash', 'nivel', 'filial', 'ativo', 'criadoEm'],
     Config: ['chave', 'valor']
@@ -25,10 +26,18 @@ var CVEngine = (function () {
   var NUMEROS = ['nivelSolicitante', 'total', 'nivelNecessario', 'nivelAprovador', 'seq', 'qtd', 'valorUnit', 'subtotal', 'valor', 'ultimoPreco', 'nivel'];
   var DATAS = ['criadoEm', 'decididoEm', 'compradoEm', 'em', 'ultimaCompra'];
   var BOOLEANOS = ['ativo'];
-  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave'];
+  var TEXTOS = ['numero', 'dataNecessidade', 'cnpj', 'telefone', 'codigo', 'senhaHash', 'chave', 'cep', 'filial', 'centroCusto', 'categoria', 'unidade'];
 
   var PADRAO = { limites: { 1: 2000, 2: 10000, 3: 50000 } };
   var NOMES = { 1: 'Comprador', 2: 'Supervisor', 3: 'Gerente', 4: 'Diretoria' };
+  // Valores iniciais da aba "Listas" (base de dados das listas de validação)
+  var LISTAS_PADRAO = {
+    filial: ['Bernardino de Campos (Matriz)', 'Assis', 'São Manuel', 'Botucatu'],
+    centroCusto: ['Operações - Coleta', 'Frota e Manutenção', 'Tratamento de Resíduos', 'Segurança do Trabalho', 'Administrativo', 'TI', 'Comercial'],
+    categoria: ['EPI', 'Materiais de consumo', 'Embalagens e coletores', 'Peças e manutenção', 'Combustível', 'Equipamentos', 'Serviços', 'TI', 'Escritório'],
+    unidade: ['un', 'cx', 'pct', 'kg', 'L', 'm', 'serv', 'h']
+  };
+  var TIPOS_LISTA = { filial: 'Filial', centroCusto: 'Centro de custo', categoria: 'Categoria', unidade: 'Unidade' };
 
   // ---------- utilidades ----------
   function agora() { return new Date().toISOString(); }
@@ -67,6 +76,88 @@ var CVEngine = (function () {
   function itemPorDescricao(db, d) { var n = norm(d); for (var i = 0; i < db.Itens.length; i++) if (norm(db.Itens[i].descricao) === n) return db.Itens[i]; return null; }
   function fornPorNome(db, nome) { var n = norm(nome); for (var i = 0; i < db.Fornecedores.length; i++) if (norm(db.Fornecedores[i].nome) === n) return db.Fornecedores[i]; return null; }
 
+  // ---------- listas (aba Listas: uma coluna por lista) ----------
+  function linhasListasPadrao() {
+    var max = 0, rows = [];
+    Object.keys(LISTAS_PADRAO).forEach(function (k) { max = Math.max(max, LISTAS_PADRAO[k].length); });
+    for (var i = 0; i < max; i++) {
+      var r = {}; Object.keys(LISTAS_PADRAO).forEach(function (k) { r[k] = LISTAS_PADRAO[k][i] || ''; }); rows.push(r);
+    }
+    return rows;
+  }
+  function listas(db) {
+    var out = {};
+    Object.keys(TIPOS_LISTA).forEach(function (k) {
+      var vistos = {}, l = [];
+      (db.Listas || []).forEach(function (r) { var v = txt(r[k]); if (v && !vistos[norm(v)]) { vistos[norm(v)] = 1; l.push(v); } });
+      out[k] = l.length ? l : LISTAS_PADRAO[k].slice();
+    });
+    return out;
+  }
+  function addLista(db, tipo, valor) {
+    if (!TIPOS_LISTA[tipo]) erro('Lista inválida.');
+    valor = txt(valor); if (!valor) erro('Informe o valor.');
+    db.Listas = db.Listas || [];
+    if (!db.Listas.some(function (r) { return txt(r[tipo]); })) { // coluna vazia usa o padrão: grava o padrão antes
+      LISTAS_PADRAO[tipo].forEach(function (v, i) { if (!db.Listas[i]) db.Listas[i] = { filial: '', centroCusto: '', categoria: '', unidade: '' }; db.Listas[i][tipo] = v; });
+    }
+    if (listas(db)[tipo].some(function (v) { return norm(v) === norm(valor); })) erro('"' + valor + '" já existe na lista de ' + TIPOS_LISTA[tipo] + '.');
+    var livre = null;
+    for (var i = 0; i < db.Listas.length; i++) if (!txt(db.Listas[i][tipo])) { livre = db.Listas[i]; break; }
+    if (livre) livre[tipo] = valor;
+    else { var r = { filial: '', centroCusto: '', categoria: '', unidade: '' }; r[tipo] = valor; db.Listas.push(r); }
+    sujar(db, 'Listas');
+  }
+  function removeLista(db, tipo, valor) {
+    if (!TIPOS_LISTA[tipo]) erro('Lista inválida.');
+    db.Listas = db.Listas || [];
+    var vals = listas(db)[tipo].filter(function (v) { return norm(v) !== norm(valor); });
+    if (!vals.length) erro('A lista precisa ter ao menos um valor.');
+    // reescreve a coluna compactada (sem buracos)
+    var n = Math.max(db.Listas.length, vals.length);
+    for (var i = 0; i < n; i++) {
+      if (!db.Listas[i]) db.Listas[i] = { filial: '', centroCusto: '', categoria: '', unidade: '' };
+      db.Listas[i][tipo] = vals[i] || '';
+    }
+    db.Listas = db.Listas.filter(function (r) { return Object.keys(TIPOS_LISTA).some(function (k) { return txt(r[k]); }); });
+    sujar(db, 'Listas');
+  }
+
+  // ---------- CPF / CNPJ ----------
+  function digitos(s) { return String(s || '').replace(/\D/g, ''); }
+  function cnpjValido(c) {
+    c = digitos(c); if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
+    var calc = function (n) { var s = 0, p = n - 7; for (var i = 0; i < n; i++) { s += c[i] * p--; if (p < 2) p = 9; } var r = s % 11; return r < 2 ? 0 : 11 - r; };
+    return calc(12) === +c[12] && calc(13) === +c[13];
+  }
+  function cpfValido(c) {
+    c = digitos(c); if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
+    for (var t = 9; t < 11; t++) { var s = 0; for (var i = 0; i < t; i++) s += c[i] * (t + 1 - i); var d = ((10 * s) % 11) % 10; if (+c[t] !== d) return false; }
+    return true;
+  }
+  function formatarDoc(s) {
+    var d = digitos(s);
+    if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+    return txt(s);
+  }
+  function titulo(s) { return txt(s).toLowerCase().replace(/(^|\s)\S/g, function (m) { return m.toUpperCase(); }).replace(/ (De|Da|Do|Das|Dos|E) /g, function (m) { return m.toLowerCase(); }); }
+  /** Converte a resposta da BrasilAPI ou da ReceitaWS para um formato único */
+  function normalizarCnpj(j) {
+    if (!j) erro('CNPJ não encontrado.');
+    if (j.status === 'ERROR') erro(j.message || 'CNPJ não encontrado.');
+    var tel = j.ddd_telefone_1 ? digitos(j.ddd_telefone_1) : txt(j.telefone);
+    if (/^\d{10,11}$/.test(tel)) tel = '(' + tel.slice(0, 2) + ') ' + tel.slice(2, tel.length - 4) + '-' + tel.slice(-4);
+    var ativ = j.cnae_fiscal_descricao || (j.atividade_principal && j.atividade_principal[0] && j.atividade_principal[0].text) || '';
+    return {
+      cnpj: formatarDoc(j.cnpj), razaoSocial: txt(j.razao_social || j.nome), nomeFantasia: txt(j.nome_fantasia || j.fantasia),
+      situacao: txt(j.descricao_situacao_cadastral || j.situacao).toUpperCase(),
+      endereco: [j.logradouro, j.numero, j.complemento, j.bairro].map(txt).filter(Boolean).join(', '),
+      cidade: titulo(j.municipio), uf: txt(j.uf).toUpperCase(), cep: txt(j.cep),
+      telefone: tel, email: txt(j.email).toLowerCase(), atividade: txt(ativ)
+    };
+  }
+
   // ---------- estado entregue à interface ----------
   function estado(db, u, extra) {
     var itensBy = agrupar(db.Itens_Solicitacao, 'solicitacaoId');
@@ -88,6 +179,7 @@ var CVEngine = (function () {
       limites: limites(db),
       requests: reqs,
       users: Number(u.nivel) >= 3 ? db.Usuarios.map(publico) : [],
+      listas: listas(db),
       catalogo: db.Itens.slice().sort(function (a, b) { return String(a.descricao).localeCompare(String(b.descricao)); }),
       fornecedores: db.Fornecedores.slice().sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); }),
       precos: precos,
@@ -100,6 +192,7 @@ var CVEngine = (function () {
     em = em || agora();
     if (!txt(d.centroCusto)) erro('Informe o centro de custo.');
     if (!txt(d.categoria)) erro('Informe a categoria.');
+    if (!txt(d.justificativa)) erro('Informe o motivo da compra.');
     var itens = (d.itens || []).map(function (i) {
       return { itemId: txt(i.itemId), descricao: txt(i.descricao), unidade: txt(i.unidade) || 'un', qtd: Number(i.qtd) || 0, valorUnit: r2(i.valorUnit) };
     }).filter(function (i) { return i.descricao && i.qtd > 0; });
@@ -111,7 +204,7 @@ var CVEngine = (function () {
       id: ctx.uuid(), numero: 'PC-' + ano + '-' + pad(proximo(db, 'seq_pedido'), 4), criadoEm: em,
       solicitanteId: u.id, solicitanteNome: u.nome, nivelSolicitante: Number(u.nivel),
       filial: txt(d.filial) || u.filial, centroCusto: txt(d.centroCusto), categoria: txt(d.categoria),
-      fornecedor: txt(d.fornecedor), urgencia: txt(d.urgencia) || 'Normal', dataNecessidade: txt(d.dataNecessidade),
+      fornecedor: txt(d.fornecedor), urgencia: txt(d.urgencia), dataNecessidade: txt(d.dataNecessidade),
       justificativa: txt(d.justificativa), total: total, nivelNecessario: nivelNecessario(limites(db), total),
       status: 'pendente', aprovadorId: '', aprovadorNome: '', nivelAprovador: '', decididoEm: '', compradoEm: '', fornecedorFinal: ''
     };
@@ -214,8 +307,10 @@ var CVEngine = (function () {
         if (d.id) {
           var it = porId(db.Itens, d.id); if (!it) erro('Item não encontrado.');
           it.descricao = txt(d.descricao); it.unidade = txt(d.unidade) || 'un'; it.categoria = txt(d.categoria); it.fornecedorPreferido = txt(d.fornecedorPreferido);
+          extra.salvo = it;
         } else {
-          db.Itens.push({ id: ctx.uuid(), codigo: 'IT-' + pad(proximo(db, 'seq_item'), 4), descricao: txt(d.descricao), unidade: txt(d.unidade) || 'un', categoria: txt(d.categoria), fornecedorPreferido: txt(d.fornecedorPreferido), ultimoPreco: '', ultimaCompra: '', ativo: true, criadoEm: agora() });
+          var novo = { id: ctx.uuid(), codigo: 'IT-' + pad(proximo(db, 'seq_item'), 4), descricao: txt(d.descricao), unidade: txt(d.unidade) || 'un', categoria: txt(d.categoria), fornecedorPreferido: txt(d.fornecedorPreferido), ultimoPreco: '', ultimaCompra: '', ativo: true, criadoEm: agora() };
+          db.Itens.push(novo); extra.salvo = novo;
         }
         sujar(db, 'Itens');
         break;
@@ -224,12 +319,21 @@ var CVEngine = (function () {
 
       case 'saveFornecedor': {
         var f = p.fornecedor || {};
-        if (!txt(f.nome)) erro('Informe o nome do fornecedor.');
+        if (!txt(f.nome)) erro('Informe a razão social do fornecedor.');
         var fd = fornPorNome(db, f.nome);
         if (fd && fd.id !== f.id) erro('Já existe um fornecedor com este nome.');
-        var campos = { nome: txt(f.nome), cnpj: txt(f.cnpj), contato: txt(f.contato), telefone: txt(f.telefone), email: txt(f.email), cidade: txt(f.cidade), categorias: txt(f.categorias) };
-        if (f.id) { var fx = porId(db.Fornecedores, f.id); if (!fx) erro('Fornecedor não encontrado.'); for (var k in campos) fx[k] = campos[k]; }
-        else { campos.id = ctx.uuid(); campos.ativo = true; campos.criadoEm = agora(); db.Fornecedores.push(campos); }
+        var doc = digitos(f.cnpj);
+        if (doc) {
+          if (doc.length === 14 ? !cnpjValido(doc) : doc.length === 11 ? !cpfValido(doc) : true) erro('CNPJ/CPF inválido. Confira os números.');
+          var fdoc = db.Fornecedores.filter(function (x) { return digitos(x.cnpj) === doc && x.id !== f.id; })[0];
+          if (fdoc) erro('Este CNPJ/CPF já está cadastrado para "' + fdoc.nome + '".');
+        }
+        var campos = { nome: txt(f.nome), cnpj: formatarDoc(doc), contato: txt(f.contato), telefone: txt(f.telefone), email: txt(f.email), cidade: txt(f.cidade), categorias: txt(f.categorias),
+          nomeFantasia: txt(f.nomeFantasia), endereco: txt(f.endereco), uf: txt(f.uf).toUpperCase(), cep: txt(f.cep), situacao: txt(f.situacao), atividade: txt(f.atividade) };
+        var fx;
+        if (f.id) { fx = porId(db.Fornecedores, f.id); if (!fx) erro('Fornecedor não encontrado.'); for (var k in campos) fx[k] = campos[k]; }
+        else { fx = campos; campos.id = ctx.uuid(); campos.ativo = true; campos.criadoEm = agora(); db.Fornecedores.push(campos); }
+        extra.salvo = fx;
         sujar(db, 'Fornecedores');
         break;
       }
@@ -267,6 +371,8 @@ var CVEngine = (function () {
         extra.msg = 'Senha alterada.';
         break;
       }
+      case 'addLista': exigir(u, 3); addLista(db, p.tipo, p.valor); extra.salvo = txt(p.valor); break;
+      case 'removeLista': exigir(u, 3); removeLista(db, p.tipo, p.valor); break;
       default: erro('Ação desconhecida: ' + action);
     }
     return estado(db, u, extra);
@@ -320,6 +426,7 @@ var CVEngine = (function () {
       { id: ctx.uuid(), nome: 'Carla Mendes', email: 'supervisor@cheiroverde.com.br', senhaHash: senha, nivel: 2, filial: filiais[0], ativo: true, criadoEm: em },
       { id: ctx.uuid(), nome: 'Diego Rocha', email: 'gerente@cheiroverde.com.br', senhaHash: senha, nivel: 3, filial: filiais[0], ativo: true, criadoEm: em }
     ];
+    db.Listas = linhasListasPadrao();
     FORNECEDORES.forEach(function (f) { db.Fornecedores.push({ id: ctx.uuid(), nome: f[0], cnpj: '', contato: '', telefone: '', email: '', cidade: f[1], categorias: f[2], ativo: true, criadoEm: em }); });
     CATALOGO.forEach(function (c) { db.Itens.push({ id: ctx.uuid(), codigo: 'IT-' + pad(proximo(db, 'seq_item'), 4), descricao: c[0], unidade: c[1], categoria: c[2], fornecedorPreferido: c[3], ultimoPreco: '', ultimaCompra: '', ativo: true, criadoEm: em }); });
     if (opcoes.demo) demo(db, ctx);
@@ -332,7 +439,6 @@ var CVEngine = (function () {
     function rnd() { a |= 0; a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
     function entre(x, y) { return x + rnd() * (y - x); }
     var U = db.Usuarios, DAY = 86400000, now = Date.now();
-    var urg = ['Baixa', 'Normal', 'Normal', 'Alta', 'Urgente'];
     var planos = [];
     for (var i = 0; i < 30; i++) planos.push(now - Math.floor(entre(0, 175)) * DAY - Math.floor(entre(0, 10)) * 3600000);
     planos.sort();
@@ -344,7 +450,7 @@ var CVEngine = (function () {
       var em = new Date(ms).toISOString();
       var r = criar(db, criador, {
         filial: criador.filial, centroCusto: CC_POR_CAT[c[2]], categoria: c[2], fornecedor: c[3],
-        urgencia: urg[Math.floor(rnd() * urg.length)], dataNecessidade: new Date(ms + entre(3, 20) * DAY).toISOString().slice(0, 10),
+        urgencia: '', dataNecessidade: '',
         justificativa: 'Reposição para continuidade da operação.', itens: itens
       }, ctx, em);
       var idade = (now - ms) / DAY;
@@ -360,7 +466,8 @@ var CVEngine = (function () {
   }
 
   return {
-    TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES,
+    TABELAS: TABELAS, NUMEROS: NUMEROS, DATAS: DATAS, BOOLEANOS: BOOLEANOS, TEXTOS: TEXTOS, NOMES: NOMES, TIPOS_LISTA: TIPOS_LISTA,
+    linhasListasPadrao: linhasListasPadrao, listas: listas, cnpjValido: cnpjValido, cpfValido: cpfValido, digitos: digitos, formatarDoc: formatarDoc, normalizarCnpj: normalizarCnpj,
     novoDb: novoDb, seed: seed, login: login, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, norm: norm, r2: r2
   };
