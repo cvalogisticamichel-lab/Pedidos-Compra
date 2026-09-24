@@ -1,10 +1,10 @@
 /* Service worker — permite instalar como app e abrir offline.
    Ao publicar uma nova versão, altere CACHE para forçar atualização. */
-const CACHE = 'cv-compras-v2.2.0';
+const CACHE = 'cv-compras-v2.3.0';
 const ARQUIVOS = [
   './', './index.html', './css/style.css',
-  './js/config.js', './js/engine.js', './js/store.js', './js/app.js',
-  './assets/logo.svg', './assets/logo-branco.svg', './assets/icon.svg', './assets/icon-redondo.svg', './assets/icon-192.png', './assets/icon-512.png',
+  './js/marca.js', './js/config.js', './js/engine.js', './js/store.js', './js/app.js',
+  './assets/logo.svg', './assets/logo-branco.svg', './assets/icon.svg', './assets/icon-redondo.svg', './assets/icon-192.png', './assets/icon-512.png', './assets/carregando.gif',
   './manifest.webmanifest'
 ];
 self.addEventListener('install', e => {

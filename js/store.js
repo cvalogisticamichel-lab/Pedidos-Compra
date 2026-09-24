@@ -49,6 +49,9 @@
       const u = db.Usuarios.find(x => x.id === p.token && x.ativo !== false);
       if (!u) { const e = new Error('Sessão expirada. Entre novamente.'); e.sessao = false; throw e; }
       let a = action;
+      if (a === 'createRequest' && p.orcamentos) { // demonstração: guarda só arquivos pequenos
+        p = Object.assign({}, p, { orcamentos: p.orcamentos.map(o => ({ fornecedor: o.fornecedor, valor: o.valor, nome: o.nome, arquivoUrl: o.base64 && o.base64.length < 400000 ? 'data:' + (o.mime || 'application/octet-stream') + ';base64,' + o.base64 : '' })) });
+      }
       if (a === 'uploadOrcamento') {
         if (p.base64.length > 2.8e6) throw new Error('No modo demonstração o limite é 2 MB por arquivo.');
         p = Object.assign({}, p, { arquivoUrl: 'data:' + (p.mime || 'application/octet-stream') + ';base64,' + p.base64, arquivoNome: p.nome });
@@ -134,6 +137,19 @@
     extra: () => (st ? st.extra || {} : {}),
     refresh: () => call('state'),
     act: (action, payload) => call(action, payload),
+    /** Cria a solicitação enviando junto os arquivos de orçamento */
+    async criarSolicitacao(data, orcs) {
+      const MB = 1024 * 1024; let total = 0;
+      const lista = [];
+      for (const o of orcs) {
+        if (o.file.size > 10 * MB) throw new Error(`O arquivo "${o.file.name}" passa de 10 MB.`);
+        total += o.file.size;
+        lista.push({ fornecedor: o.fornecedor, valor: o.valor, nome: o.file.name, mime: o.file.type, base64: await lerArquivo(o.file) });
+      }
+      if (total > 30 * MB) throw new Error('Os orçamentos somam mais de 30 MB. Reduza o tamanho dos arquivos (ex.: PDF em vez de foto).');
+      return call('createRequest', { data, orcamentos: lista });
+    },
+    minOrcamentos: () => (st && st.minOrcamentos != null ? Number(st.minOrcamentos) : 3),
     async upload(solicitacaoId, file, fornecedor, valor) {
       if (!file) throw new Error('Selecione o arquivo do orçamento.');
       const base64 = await lerArquivo(file);

@@ -6,6 +6,7 @@
   const S = window.CVStore;
   const C = window.CV_CONFIG;
   const root = document.getElementById('root');
+  const M = window.CV_MARCA;
 
   // ---------- helpers ----------
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,15 +38,18 @@
   }
 
   /** Executa uma ação no servidor com botão em "carregando", mensagens e re-render. */
-  async function executar(btn, fn, okMsg, depois) {
+  async function executar(btn, fn, okMsg, depois, overlayMsg) {
     const txtOrig = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Salvando…'; }
+    if (overlayMsg) mostrarCarregando(overlayMsg);
     try {
       const r = await fn();
+      esconderCarregando();
       if (okMsg) toast(typeof okMsg === 'function' ? okMsg(r) : okMsg);
       if (depois) depois(r); else render();
       return r;
     } catch (e) {
+      esconderCarregando();
       if (e.sessao === false) { S.logout(); toast(e.message, true); render(); return; }
       toast(e.message || 'Erro inesperado.', true);
       if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; }
@@ -90,8 +94,15 @@
 
   // ========== CARREGANDO ==========
   function renderCarregando(msg) {
-    root.innerHTML = `<div class="loading-screen"><img src="assets/logo.svg" alt="Cheiro Verde Ambiental"><div><span class="spin dark"></span> ${esc(msg || 'Carregando…')}</div></div>`;
+    root.innerHTML = `<div class="loading-screen">${M.carregando()}<p>${esc(msg || 'Carregando…')}</p></div>`;
   }
+  /** Tela de carregamento por cima da página (login, envio de pedido, anexos) */
+  function mostrarCarregando(msg) {
+    let ov = document.querySelector('.loading-overlay');
+    if (!ov) { ov = document.createElement('div'); ov.className = 'loading-overlay'; ov.setAttribute('role', 'status'); document.body.appendChild(ov); }
+    ov.innerHTML = `<div class="loading-box">${M.carregando()}<p>${esc(msg || 'Carregando…')}</p></div>`;
+  }
+  function esconderCarregando() { document.querySelectorAll('.loading-overlay').forEach(o => o.remove()); }
 
   // ========== LOGIN ==========
   function renderLogin(msgErro) {
@@ -99,7 +110,7 @@
     root.innerHTML = `
     <div class="login-wrap">
       <section class="login-hero">
-        <img class="logo-img" src="assets/logo-branco.svg" alt="Cheiro Verde Ambiental">
+        <div class="logo-img">${M.logo(true)}</div>
         <div>
           <h1>Pedidos de compra com agilidade e controle.</h1>
           <p>Solicite, aprove dentro da sua alçada e acompanhe cada compra da Cheiro Verde Ambiental em um só lugar.</p>
@@ -108,7 +119,7 @@
       </section>
       <section class="login-form">
         <form class="login-card" id="fLogin" autocomplete="on">
-          <img class="logo-img" src="assets/logo.svg" alt="Cheiro Verde Ambiental">
+          <div class="logo-img">${M.logo(false)}</div>
           <h1>Entrar</h1>
           <p class="muted">Acesse com seu e-mail corporativo.</p>
           <div class="field"><label for="email">E-mail</label><input id="email" type="email" required autocomplete="username"></div>
@@ -129,11 +140,14 @@
       e.preventDefault();
       const b = document.getElementById('btnEntrar');
       b.disabled = true; b.innerHTML = '<span class="spin"></span> Entrando…';
+      mostrarCarregando('Entrando…');
       try {
         await S.login(f.email.value, f.senha.value);
+        esconderCarregando();
         if (!location.hash || location.hash === '#/') location.hash = '#/inicio';
         render();
       } catch (err) {
+        esconderCarregando();
         document.getElementById('erro').textContent = err.message;
         b.disabled = false; b.textContent = 'Entrar';
       }
@@ -157,7 +171,7 @@
     root.innerHTML = `
     <div class="app">
       <aside class="sidebar">
-        <div class="brand"><img src="assets/logo-branco.svg" alt="Cheiro Verde Ambiental"></div>
+        <div class="brand">${M.logo(true)}</div>
         <nav class="nav">
           ${disp.map(x => `<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}</a>`).join('')}
         </nav>
@@ -165,7 +179,7 @@
       </aside>
       <div class="main">
         <header class="topbar">
-          <img class="mobile-brand" src="assets/logo.svg" alt="Cheiro Verde Ambiental">
+          <div class="mobile-brand">${M.logo(false)}</div>
           <h2 class="page-title-desk">${esc(r.nome)}</h2>
           <div class="user-chip">
             <button class="btn btn-ghost btn-sm" id="btnSync" title="Atualizar dados">${icon('sync', 18)}</button>
@@ -381,6 +395,7 @@
   // ========== NOVA SOLICITAÇÃO ==========
   function vNova(el, u) {
     const L = S.listas();
+    const minOrc = S.minOrcamentos();
     const novoItem = () => ({ itemId: '', descricao: '', qtd: 1, unidade: 'un', valorUnit: '' });
     const itens = [novoItem()];
     const lim = S.limites();
@@ -416,11 +431,72 @@
             <div id="hintAlcada" class="hint ok">Informe os itens para calcular a alçada.</div>
           </div>
         </div>
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-titulo" style="margin:0"><span class="passo">4</span> Orçamentos</h2>
+            <span class="orc-cont" id="orcCont"></span>
+          </div>
+          <p class="small muted" style="margin:-6px 0 12px">Anexe ${minOrc > 0 ? `pelo menos <b>${minOrc} orçamentos</b>` : 'os orçamentos'} (PDF, foto, Word ou Excel — até 10 MB cada). O de menor valor fica destacado.</p>
+          <div class="orc-linhas" id="orcLinhas"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="addOrc" style="margin-top:10px">${icon('plus', 16)} Adicionar outro orçamento</button>
+        </div>
         <div class="acoes" style="justify-content:flex-end">
+          <span class="envio-status" id="envioStatus"></span>
           <a href="#/inicio" class="btn btn-ghost">Cancelar</a>
           <button type="submit" class="btn btn-primary" id="btnEnviar">Enviar solicitação</button>
         </div>
       </form>`;
+
+    // --- orçamentos ---
+    const orcs = [];
+    const novoOrc = () => ({ fornecedor: '', valor: '', file: null });
+    for (let k = 0; k < Math.max(minOrc, 1); k++) orcs.push(novoOrc());
+    const orcBox = el.querySelector('#orcLinhas');
+    const orcCompleto = o => o.file && o.fornecedor.trim();
+    const atualizarOrcStatus = () => {
+      const n = orcs.filter(orcCompleto).length;
+      const ok = n >= minOrc;
+      const cont = el.querySelector('#orcCont');
+      cont.className = 'orc-cont' + (ok ? ' ok' : '');
+      cont.textContent = `${ok ? '✓ ' : ''}${n} de ${minOrc} anexados`;
+      const vals = orcs.filter(o => orcCompleto(o) && Number(o.valor) > 0);
+      const menor = vals.length > 1 ? vals.reduce((a, b) => (Number(b.valor) < Number(a.valor) ? b : a)) : null;
+      orcBox.querySelectorAll('.orc-linha').forEach((ln, i) => {
+        ln.classList.toggle('ok', !!orcCompleto(orcs[i]));
+        ln.querySelector('.menor').hidden = orcs[i] !== menor;
+      });
+      const btn = el.querySelector('#btnEnviar'), st = el.querySelector('#envioStatus');
+      btn.disabled = !ok;
+      st.className = 'envio-status' + (ok ? ' ok' : '');
+      st.textContent = ok ? '' : `Anexe ${minOrc - n} orçamento(s) para liberar o envio`;
+    };
+    const pintarOrcs = () => {
+      orcBox.innerHTML = orcs.map((o, i) => `<div class="orc-linha" data-o="${i}">
+        <div class="n">${i + 1}</div>
+        <div><label>Fornecedor *</label><input data-ok="fornecedor" value="${esc(o.fornecedor)}" placeholder="Digite 3 letras…"></div>
+        <div><label>Valor total (R$)</label><input data-ok="valor" type="number" min="0" step="0.01" value="${esc(o.valor)}" placeholder="0,00"></div>
+        <div><label>Arquivo * <span class="menor small" style="color:var(--ok)" hidden>· menor valor</span></label>
+          <label class="arq">${icon('clip', 16)}<span>${o.file ? esc(o.file.name) : 'Escolher arquivo…'}</span><input type="file" data-ok="file" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx"></label></div>
+        <button type="button" class="btn btn-danger btn-sm" data-rmo="${i}" title="Remover" ${orcs.length <= Math.max(minOrc, 1) ? 'disabled' : ''}>${icon('trash', 16)}</button>
+      </div>`).join('');
+      orcBox.querySelectorAll('[data-ok=fornecedor]').forEach(inp => {
+        const i = +inp.closest('.orc-linha').dataset.o;
+        autocompletar(inp, { buscar: buscarFornecedores, aoEscolher: f => { orcs[i].fornecedor = f.nome; atualizarOrcStatus(); }, textoCriar: q => `Cadastrar novo fornecedor "${q}"`,
+          aoCriar: q => formFornecedor(null, { prefill: prefillForn(q), onSaved: f => { orcs[i].fornecedor = f.nome; inp.value = f.nome; atualizarOrcStatus(); } }) });
+      });
+      atualizarOrcStatus();
+    };
+    const aoMudarOrc = e => {
+      const ln = e.target.closest('.orc-linha'); if (!ln || !e.target.dataset.ok) return;
+      const o = orcs[+ln.dataset.o], k = e.target.dataset.ok;
+      if (k === 'file') { o.file = e.target.files[0] || null; ln.querySelector('.arq span').textContent = o.file ? o.file.name : 'Escolher arquivo…'; }
+      else o[k] = e.target.value;
+      atualizarOrcStatus();
+    };
+    orcBox.addEventListener('input', aoMudarOrc);
+    orcBox.addEventListener('change', aoMudarOrc);
+    orcBox.addEventListener('click', e => { const b = e.target.closest('[data-rmo]'); if (b) { orcs.splice(+b.dataset.rmo, 1); pintarOrcs(); } });
+    el.querySelector('#addOrc').onclick = () => { orcs.push(novoOrc()); pintarOrcs(); };
 
     // --- listas com "+ Adicionar novo…" (Gerente) ---
     el.querySelectorAll('select[data-lista]').forEach(s => {
@@ -543,23 +619,24 @@
     });
     el.querySelector('#addItem').onclick = () => { itens.push(novoItem()); pintarItens(); body.querySelector('tr:last-child input').focus(); };
     pintarItens();
+    pintarOrcs();
 
     el.querySelector('#fNova').addEventListener('submit', e => {
       e.preventDefault();
       const f = e.target;
-      executar(el.querySelector('#btnEnviar'), () => S.act('createRequest', {
-        data: {
-          filial: f.filial.value, centroCusto: f.centroCusto.value, categoria: f.categoria.value,
-          fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens
-        }
-      }), j => {
+      const anexos = orcs.filter(orcCompleto);
+      if (anexos.length < minOrc) { toast(`Anexe pelo menos ${minOrc} orçamentos (com fornecedor e arquivo).`, true); el.querySelector('#orcLinhas').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      executar(el.querySelector('#btnEnviar'), () => S.criarSolicitacao({
+        filial: f.filial.value, centroCusto: f.centroCusto.value, categoria: f.categoria.value,
+        fornecedor: f.fornecedor.value, justificativa: f.justificativa.value, itens
+      }, anexos.map(o => ({ fornecedor: o.fornecedor.trim(), valor: o.valor, file: o.file }))), j => {
         const c = j.state.extra.criado;
         return c.status === 'aprovado' ? `${c.numero} criada e aprovada na sua alçada.` : `${c.numero} enviada para aprovação (${S.nomeNivel(c.nivelNecessario)}).`;
       }, j => {
         const id = j.state.extra.criado.id;
         if (location.hash === '#/solicitacoes') render(); else location.hash = '#/solicitacoes';
         setTimeout(() => abrirDetalhe(id), 0);
-      });
+      }, `Enviando solicitação e ${anexos.length} orçamentos…`);
     });
   }
 
@@ -694,7 +771,7 @@
       const fo = bg.querySelector('#fOrc');
       if (fo) fo.addEventListener('submit', e => {
         e.preventDefault();
-        executar(fo.querySelector('button'), () => S.upload(r.id, fo.arquivo.files[0], fo.fornecedor.value, fo.valor.value), 'Orçamento anexado.', reabrir);
+        executar(fo.querySelector('button'), () => S.upload(r.id, fo.arquivo.files[0], fo.fornecedor.value, fo.valor.value), 'Orçamento anexado.', reabrir, 'Enviando orçamento…');
       });
       bg.querySelectorAll('[data-rmorc]').forEach(b => b.onclick = () => {
         if (!confirm('Remover este orçamento da solicitação? (o arquivo continua no Drive)')) return;
@@ -1007,18 +1084,22 @@
       </div>
       <div class="card">
         <div class="card-head"><h2>Listas de validação</h2><span class="small muted">${S.modo === 'google' ? 'gravadas na aba "Listas" da planilha' : 'base de dados das listas'}</span></div>
-        <div class="listas-grid">${Object.keys(NOME_LISTA).map(t => `<div class="lista-col">
-          <h3>${NOME_LISTA[t]} <span class="muted small">(${S.listas()[t].length})</span></h3>
-          <div class="chips">${S.listas()[t].map(v => `<span class="chip">${esc(v)}<button type="button" data-rml="${t}" data-v="${esc(v)}" title="Remover">×</button></span>`).join('')}</div>
-          <form class="addl" data-tipo="${t}"><input placeholder="Novo valor" required><button class="btn btn-ghost btn-sm">${icon('plus', 14)} Adicionar</button></form>
+        <div class="listas-cards">${Object.keys(NOME_LISTA).map(t => `<div class="lista-box" data-tipo="${t}">
+          <h3>${NOME_LISTA[t]} <span class="qtd">${S.listas()[t].length} itens</span></h3>
+          <div class="linha">
+            <select class="sel-lista" aria-label="Valores de ${NOME_LISTA[t]}">${opts(S.listas()[t])}</select>
+            <button type="button" class="btn btn-danger btn-sm" data-rml="${t}" title="Remover o valor selecionado">${icon('trash', 15)} Remover</button>
+          </div>
+          <form class="linha addl" data-tipo="${t}"><input placeholder="Novo valor de ${NOME_LISTA[t].toLowerCase()}" required><button class="btn btn-primary btn-sm">${icon('plus', 15)} Adicionar</button></form>
         </div>`).join('')}</div>
         <p class="small muted" style="margin:10px 0 0">Esses valores aparecem como opções na Nova solicitação e como listas suspensas na planilha. Remover um valor não altera pedidos já feitos.</p>
       </div>
       <div class="card">
-        <div class="card-head"><h2>Limites de aprovação (alçadas)</h2></div>
+        <div class="card-head"><h2>Alçadas e regras</h2></div>
         <form id="fLim" class="grid g4" style="align-items:end">
           ${[1, 2, 3].map(n => `<div><label>Nível 0${n} — ${esc(S.nomeNivel(n))} (R$)</label><input type="number" min="1" step="0.01" name="l${n}" value="${lim[n]}"></div>`).join('')}
-          <div><button class="btn btn-primary" style="width:100%">Salvar limites</button></div>
+          <div><button class="btn btn-primary" style="width:100%">Salvar</button></div>
+          <div><label>Mínimo de orçamentos por solicitação</label><input type="number" min="0" max="10" step="1" name="minOrc" value="${S.minOrcamentos()}"></div>
         </form>
         <p class="small muted" style="margin:10px 0 0">Acima do limite do Gerente, o pedido fica aguardando <b>${esc(C.instanciaSuperior)}</b>. Novos limites valem para novas solicitações.</p>
       </div>
@@ -1055,12 +1136,13 @@
       executar(f.querySelector('button'), () => S.act('addLista', { tipo: f.dataset.tipo, valor: f.querySelector('input').value }), 'Valor adicionado.');
     }));
     el.querySelectorAll('[data-rml]').forEach(b => b.onclick = () => {
-      if (!confirm(`Remover "${b.dataset.v}" da lista de ${NOME_LISTA[b.dataset.rml]}?`)) return;
-      executar(b, () => S.act('removeLista', { tipo: b.dataset.rml, valor: b.dataset.v }), 'Valor removido.');
+      const v = b.closest('.lista-box').querySelector('.sel-lista').value;
+      if (!v || !confirm(`Remover "${v}" da lista de ${NOME_LISTA[b.dataset.rml]}?`)) return;
+      executar(b, () => S.act('removeLista', { tipo: b.dataset.rml, valor: v }), 'Valor removido.');
     });
     el.querySelector('#fLim').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
-      executar(f.querySelector('button'), () => S.act('saveLimites', { limites: { 1: f.l1.value, 2: f.l2.value, 3: f.l3.value } }), 'Limites atualizados.');
+      executar(f.querySelector('button'), () => S.act('saveLimites', { limites: { 1: f.l1.value, 2: f.l2.value, 3: f.l3.value }, minOrcamentos: f.minOrc.value }), 'Limites atualizados.');
     });
     const fU = el.querySelector('#fUser');
     const abrirForm = x => {

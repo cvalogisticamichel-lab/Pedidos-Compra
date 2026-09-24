@@ -66,6 +66,7 @@ var CVEngine = (function () {
       3: Number(cfg(db, 'limite_3', PADRAO.limites[3]))
     };
   }
+  function minOrcamentos(db) { var v = cfg(db, 'min_orcamentos', 3); return v === '' || v == null || isNaN(Number(v)) ? 3 : Number(v); }
   function nivelNecessario(lim, total) { for (var n = 1; n <= 3; n++) if (total <= Number(lim[n])) return n; return 4; }
   function podeAprovar(u, r) { return !!u && r.status === 'pendente' && Number(r.nivelNecessario) <= Number(u.nivel) && Number(r.nivelNecessario) <= 3; }
   function publico(u) { return { id: u.id, nome: u.nome, email: u.email, nivel: Number(u.nivel), filial: u.filial, ativo: u.ativo !== false }; }
@@ -195,6 +196,7 @@ var CVEngine = (function () {
     return {
       user: publico(u),
       limites: limites(db),
+      minOrcamentos: minOrcamentos(db),
       requests: reqs,
       users: Number(u.nivel) >= 3 ? db.Usuarios.map(publico) : [],
       listas: listas(db),
@@ -287,8 +289,19 @@ var CVEngine = (function () {
       case 'state': break;
 
       case 'createRequest': {
+        // Orçamentos obrigatórios (mínimo definido em Configurações; padrão 3)
+        var min = minOrcamentos(db);
+        var orcs = (p.orcamentos || []).filter(function (o) { return txt(o.nome) || txt(o.arquivoUrl); });
+        if (orcs.length < min) erro('Anexe pelo menos ' + min + ' orçamentos para enviar a solicitação (anexados: ' + orcs.length + ').');
+        orcs.forEach(function (o, i) { if (!txt(o.fornecedor)) erro('Informe o fornecedor do orçamento ' + (i + 1) + '.'); });
         var r = criar(db, u, p.data || {}, ctx);
         extra.criado = { id: r.id, numero: r.numero, status: r.status, nivelNecessario: r.nivelNecessario };
+        extra.orcamentosCriados = orcs.map(function (o) {
+          var row = { id: ctx.uuid(), solicitacaoId: r.id, numero: r.numero, fornecedor: txt(o.fornecedor), valor: r2(o.valor), arquivoNome: txt(o.nome), arquivoUrl: txt(o.arquivoUrl), enviadoPor: u.nome, em: r.criadoEm };
+          db.Orcamentos.push(row);
+          return row.id;
+        });
+        if (orcs.length) { sujar(db, 'Orcamentos'); hist(db, r, u.nome, orcs.length + ' orçamentos anexados', '', r.criadoEm); }
         break;
       }
       case 'decide': decidir(db, getReq(db, p.id), u, !!p.aprovar, p.obs); break;
@@ -380,6 +393,11 @@ var CVEngine = (function () {
         var a = Number(p.limites[1]), b = Number(p.limites[2]), c = Number(p.limites[3]);
         if (!(a > 0 && b > a && c > b)) erro('Os limites devem ser crescentes: Comprador < Supervisor < Gerente.');
         setCfg(db, 'limite_1', a); setCfg(db, 'limite_2', b); setCfg(db, 'limite_3', c);
+        if (p.minOrcamentos !== undefined && p.minOrcamentos !== '') {
+          var mo = Math.floor(Number(p.minOrcamentos));
+          if (!(mo >= 0 && mo <= 10)) erro('O mínimo de orçamentos deve ficar entre 0 e 10.');
+          setCfg(db, 'min_orcamentos', mo);
+        }
         break;
       }
       case 'changePassword': {

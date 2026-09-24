@@ -14,16 +14,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=2.2.0">
+  <link rel="stylesheet" href="css/style.css?v=2.3.0">
 </head>
 <body>
   <div id="root"></div>
   <noscript>Ative o JavaScript para usar o sistema.</noscript>
 
-  <script src="js/config.js?v=2.2.0"></script>
-  <script src="js/engine.js?v=2.2.0"></script>
-  <script src="js/store.js?v=2.2.0"></script>
-  <script src="js/app.js?v=2.2.0"></script>
+  <script src="js/marca.js?v=2.3.0"></script>
+  <script>document.getElementById('root').innerHTML = '<div class="loading-screen">' + CV_MARCA.carregando() + '<p>Carregando…</p></div>';</script>
+  <script src="js/config.js?v=2.3.0"></script>
+  <script src="js/engine.js?v=2.3.0"></script>
+  <script src="js/store.js?v=2.3.0"></script>
+  <script src="js/app.js?v=2.3.0"></script>
   <script>
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
