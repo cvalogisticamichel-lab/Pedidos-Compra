@@ -619,39 +619,37 @@ var CVEngine = (function () {
         var master = ehSuperAdmin(u);
         if (x.id) {
           var ux = porId(db.Usuarios, x.id); if (!ux) erro('Usuário não encontrado.');
-          if (!master && ux.id !== u.id && (Number(ux.nivel) >= 3 || ehSuperAdmin(ux))) erro('Somente o administrador master pode alterar o cadastro de outro gerente.');
+          if (ehSuperAdmin(ux) && !master) erro('Somente o administrador master altera o próprio cadastro.');
           if (ehSuperAdmin(ux) && norm(email) !== norm(ux.email)) erro('O e-mail do administrador master não pode ser alterado.');
-          if (!master) { nv = Number(ux.nivel); x.departamento = ux.departamento; }   // tipo de acesso e departamento: só o master altera
           if (ehSuperAdmin(ux)) nv = 3;
           ux.nome = txt(x.nome); ux.email = email; ux.nivel = nv; ux.filial = txt(x.filial); ux.departamento = txt(x.departamento);
           if (txt(x.senha)) ux.senhaHash = ctx.hash(txt(x.senha));
         } else {
           if (!emailAutorizado(email)) erro('E-mail não autorizado. Use um e-mail @' + DOMINIO_AUTORIZADO + '.');
           if (txt(x.senha).length < 6) erro('Defina uma senha inicial (mín. 6 caracteres).');
-          if (!master) nv = 1;   // novos usuários criados por outros gerentes entram como Comprador
           db.Usuarios.push({ id: ctx.uuid(), nome: txt(x.nome), email: email, senhaHash: ctx.hash(txt(x.senha)), nivel: nv, filial: txt(x.filial), ativo: true, criadoEm: agora(), cpf: '', status: 'ativo', aprovadoPor: u.nome, aprovadoEm: agora(), obsAcesso: '', departamento: txt(x.departamento) });
         }
         sujar(db, 'Usuarios');
         break;
       }
-      case 'alterarAcesso': {   // tipo de acesso (perfil) e departamento — exclusivo do administrador master
-        if (!ehSuperAdmin(u)) erro('Somente o administrador master pode alterar o tipo de acesso.');
+      case 'alterarAcesso': {   // tipo de acesso (perfil), departamento e situação — Gerentes
+        exigir(u, 3);
         var uac = porId(db.Usuarios, p.id); if (!uac || uac.status === 'pendente') erro('Usuário não encontrado.');
+        if (ehSuperAdmin(uac) && !ehSuperAdmin(u)) erro('Somente o administrador master altera o próprio acesso.');
         var nac = Number(p.nivel); if (!(nac >= 1 && nac <= 3) && nac !== FINANCEIRO) erro('Tipo de acesso inválido.');
         if (ehSuperAdmin(uac) && nac !== 3) erro('O administrador master precisa continuar como Gerente.');
         var ant = NOMES[uac.nivel] + (uac.departamento ? ' · ' + uac.departamento : '');
         uac.nivel = nac; uac.departamento = txt(p.departamento);
-        if (p.ativo !== undefined && !ehSuperAdmin(uac)) { uac.ativo = !!p.ativo; uac.status = uac.ativo ? 'ativo' : 'inativo'; }
+        if (p.ativo !== undefined && !ehSuperAdmin(uac) && uac.id !== u.id) { uac.ativo = !!p.ativo; uac.status = uac.ativo ? 'ativo' : 'inativo'; }
         sujar(db, 'Usuarios');
         extra.msg = uac.nome + ': ' + ant + ' → ' + NOMES[nac] + (uac.departamento ? ' · ' + uac.departamento : '') + '.';
         break;
       }
-      case 'toggleUser': { exigir(u, 3); var tu = porId(db.Usuarios, p.id); if (tu && !ehSuperAdmin(u) && (Number(tu.nivel) >= 3 || ehSuperAdmin(tu))) erro('Somente o administrador master pode ativar ou desativar gerentes.'); if (tu && tu.id !== u.id && tu.status !== 'pendente') { tu.ativo = !(tu.ativo !== false); tu.status = tu.ativo ? 'ativo' : 'inativo'; sujar(db, 'Usuarios'); } break; }
+      case 'toggleUser': { exigir(u, 3); var tu = porId(db.Usuarios, p.id); if (tu && ehSuperAdmin(tu)) erro('O administrador master não pode ser desativado.'); if (tu && tu.id !== u.id && tu.status !== 'pendente') { tu.ativo = !(tu.ativo !== false); tu.status = tu.ativo ? 'ativo' : 'inativo'; sujar(db, 'Usuarios'); } break; }
       case 'aprovarAcesso': {
         exigir(u, 3);
         var ua = porId(db.Usuarios, p.id); if (!ua || ua.status !== 'pendente') erro('Cadastro não encontrado ou já analisado.');
         var nva = Number(p.nivel); if (!(nva >= 1 && nva <= 3) && nva !== FINANCEIRO) erro('Escolha o perfil: Comprador, Supervisor, Gerente ou Financeiro.');
-        if (!ehSuperAdmin(u)) nva = 1;   // só o master define outro tipo de acesso; os demais gerentes liberam como Comprador
         ua.nivel = nva; ua.filial = txt(p.filial) || ua.filial; ua.departamento = txt(p.departamento) || ua.departamento || ''; ua.ativo = true; ua.status = 'ativo';
         ua.aprovadoPor = u.nome; ua.aprovadoEm = agora(); ua.obsAcesso = '';
         sujar(db, 'Usuarios'); extra.msg = ua.nome + ' aprovado como ' + NOMES[nva] + '.';
