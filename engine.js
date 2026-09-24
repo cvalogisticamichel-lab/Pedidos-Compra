@@ -58,10 +58,13 @@ var CVEngine = (function () {
   var MODALIDADE_VEICULOS = 'Manutenção de Veículos';
   function ehVeiculo(m) { return semAc(m) === semAc(MODALIDADE_VEICULOS); }
   function semAc(s) { return norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-  var CAT_PRODUTOS = 'Compra de Produtos', CAT_SERVICOS = 'Prestação de Serviços', CAT_AMBOS = 'Ambos (Produtos + Serviços)';
-  var TIPOS_COMPRA = [CAT_PRODUTOS, CAT_SERVICOS, CAT_AMBOS];
+  var CAT_PRODUTOS = 'Compra de Peças', CAT_SERVICOS = 'Prestação de Serviços', CAT_AMBOS = 'Peças + Serviços', CAT_CONSUMIVEIS = 'Consumíveis';
+  var TIPOS_COMPRA = [CAT_PRODUTOS, CAT_SERVICOS, CAT_AMBOS, CAT_CONSUMIVEIS];
+  var CAT_ANTIGAS = { 'Compra de Produtos': CAT_PRODUTOS, 'Ambos (Produtos + Serviços)': CAT_AMBOS };   // nomes da v2.9
   function temProdutos(cat) { return cat !== CAT_SERVICOS; }
   function temServicos(cat) { return cat === CAT_SERVICOS || cat === CAT_AMBOS; }
+  /** Título do quadro de itens conforme a categoria */
+  function rotuloProdutos(cat) { return cat === CAT_CONSUMIVEIS ? 'Consumíveis' : (cat === CAT_PRODUTOS || cat === CAT_AMBOS) ? 'Peças' : 'Itens'; }
   var TIPOS_MANUTENCAO = ['Manutenção Preventiva', 'Manutenção Corretiva', 'Pneus', 'Funilaria', 'Outros'];
   function linhaListaVazia() { var r = {}; Object.keys(TIPOS_LISTA).forEach(function (k) { r[k] = ''; }); return r; }
 
@@ -197,6 +200,10 @@ var CVEngine = (function () {
       sujar(db, 'Solicitacoes', 'Itens_Solicitacao');
       mudou = true;
     }
+    if (String(cfg(db, 'migr_v292', '')) !== '1') {   // v2.9.2: categorias renomeadas
+      db.Solicitacoes.forEach(function (r) { if (CAT_ANTIGAS[r.categoria]) r.categoria = CAT_ANTIGAS[r.categoria]; });
+      setCfg(db, 'migr_v292', '1'); sujar(db, 'Solicitacoes'); mudou = true;
+    }
     return mudou;
   }
   /** Sincroniza as placas lidas da planilha da frota: novas entram, removidas ficam inativas (histórico preservado) */
@@ -208,7 +215,7 @@ var CVEngine = (function () {
       var pl = txt(x.placa).toUpperCase(); if (!pl || vistas[pl]) return; vistas[pl] = 1;
       var ex = db.Placas.filter(function (y) { return txt(y.placa).toUpperCase() === pl; })[0];
       if (!ex) { db.Placas.push({ placa: pl, descricao: txt(x.descricao), ativo: true, atualizadoEm: em, removidaEm: '' }); mudou = true; }
-      else if (ex.ativo === false || txt(ex.descricao) !== txt(x.descricao)) { ex.ativo = true; ex.removidaEm = ''; if (txt(x.descricao)) ex.descricao = txt(x.descricao); ex.atualizadoEm = em; mudou = true; }
+      else if (ex.ativo === false || (txt(x.descricao) && txt(ex.descricao) !== txt(x.descricao))) { ex.ativo = true; ex.removidaEm = ''; if (txt(x.descricao)) ex.descricao = txt(x.descricao); ex.atualizadoEm = em; mudou = true; }
     });
     db.Placas.forEach(function (y) { if (y.ativo !== false && !vistas[txt(y.placa).toUpperCase()]) { y.ativo = false; y.removidaEm = em; mudou = true; } });
     if (mudou) sujar(db, 'Placas');
@@ -706,7 +713,7 @@ var CVEngine = (function () {
     var db = novoDb(), em = agora();
     var filiais = opcoes.filiais || ['Bernardino de Campos (Matriz)', 'Assis', 'São Manuel', 'Botucatu'];
     setCfg(db, 'limite_1', PADRAO.limites[1]); setCfg(db, 'limite_2', PADRAO.limites[2]); setCfg(db, 'limite_3', PADRAO.limites[3]);
-    setCfg(db, 'seq_pedido', 0); setCfg(db, 'seq_item', 0); setCfg(db, 'migr_v29', '1');
+    setCfg(db, 'seq_pedido', 0); setCfg(db, 'seq_item', 0); setCfg(db, 'migr_v29', '1'); setCfg(db, 'migr_v292', '1');
     if (opcoes.demo) PLACAS_DEMO.forEach(function (x) { db.Placas.push({ placa: x[0], descricao: x[1], ativo: true, atualizadoEm: em, removidaEm: '' }); });
     var senha = ctx.hash('1234');
     db.Usuarios = [
@@ -770,7 +777,7 @@ var CVEngine = (function () {
     novoDb: novoDb, seed: seed, login: login, verificarEmail: verificarEmail, assinaturaInfo: assinaturaInfo, salvarAssinaturaToken: salvarAssinaturaToken, solicitarAcesso: solicitarAcesso, emailAutorizado: emailAutorizado, ehSuperAdmin: ehSuperAdmin, DOMINIO_AUTORIZADO: DOMINIO_AUTORIZADO, handle: handle, estado: estado,
     limites: limites, nivelNecessario: nivelNecessario, podeAprovar: podeAprovar, podeVer: podeVer, limiteDoUsuario: limiteDoUsuario, limiteGerente: limiteGerente, maiorTetoGerente: maiorTetoGerente,
     migrar: migrar, sincronizarPlacas: sincronizarPlacas, ehVeiculo: ehVeiculo, TIPOS_COMPRA: TIPOS_COMPRA, TIPOS_MANUTENCAO: TIPOS_MANUTENCAO, MODALIDADE_VEICULOS: MODALIDADE_VEICULOS,
-    CAT_PRODUTOS: CAT_PRODUTOS, CAT_SERVICOS: CAT_SERVICOS, CAT_AMBOS: CAT_AMBOS, temProdutos: temProdutos, temServicos: temServicos, norm: norm, r2: r2
+    CAT_PRODUTOS: CAT_PRODUTOS, CAT_SERVICOS: CAT_SERVICOS, CAT_AMBOS: CAT_AMBOS, CAT_CONSUMIVEIS: CAT_CONSUMIVEIS, rotuloProdutos: rotuloProdutos, temProdutos: temProdutos, temServicos: temServicos, norm: norm, r2: r2
   };
 })();
 if (typeof window !== 'undefined') window.CVEngine = CVEngine;

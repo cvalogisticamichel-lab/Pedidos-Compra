@@ -261,7 +261,7 @@
     limiteGerente: dep => E.limiteGerente(st.limites, dep),
     maiorTetoGerente: () => E.maiorTetoGerente(st.limites),
     placas: () => ((st && st.placas) || []).slice(),
-    ehVeiculo: E.ehVeiculo, TIPOS_COMPRA: E.TIPOS_COMPRA, TIPOS_MANUTENCAO: E.TIPOS_MANUTENCAO, temProdutos: E.temProdutos, temServicos: E.temServicos, CAT_SERVICOS: E.CAT_SERVICOS, CAT_AMBOS: E.CAT_AMBOS,
+    ehVeiculo: E.ehVeiculo, TIPOS_COMPRA: E.TIPOS_COMPRA, TIPOS_MANUTENCAO: E.TIPOS_MANUTENCAO, temProdutos: E.temProdutos, temServicos: E.temServicos, CAT_SERVICOS: E.CAT_SERVICOS, CAT_AMBOS: E.CAT_AMBOS, rotuloProdutos: E.rotuloProdutos,
     calcTotal: itens => E.r2((itens || []).reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.valorUnit) || 0), 0)),
     listRequests: () => st.requests.slice(),
     getRequest: id => st.requests.find(r => r.id === id) || null,

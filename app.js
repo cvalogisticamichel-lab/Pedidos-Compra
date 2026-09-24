@@ -898,7 +898,7 @@
       const soItens = prod + serv;
       const total = soItens ? Math.round((soItens + frete) * 100) / 100 : 0;
       el.querySelector('#vTotal').textContent = brl(total);
-      el.querySelector('#vFrete').textContent = [prod && serv ? `produtos ${brl(prod)} + serviços ${brl(serv)}` : '', frete && soItens ? `${prod && serv ? '' : 'itens ' + brl(soItens) + ' '}+ frete ${brl(frete)}` : ''].filter(Boolean).join(' ');
+      el.querySelector('#vFrete').textContent = [prod && serv ? `${S.rotuloProdutos(cat).toLowerCase()} ${brl(prod)} + serviços ${brl(serv)}` : '', frete && soItens ? `${prod && serv ? '' : 'itens ' + brl(soItens) + ' '}+ frete ${brl(frete)}` : ''].filter(Boolean).join(' ');
       servBody.querySelectorAll('tr').forEach((tr, i) => { tr.querySelector('.sub').textContent = brl(Number(servs[i].valorUnit) || 0); });
       body.querySelectorAll('tr').forEach((tr, i) => {
         tr.querySelector('.sub').textContent = brl((+itens[i].qtd || 0) * (+itens[i].valorUnit || 0));
@@ -952,7 +952,7 @@
     const aplicarCategoria = () => {
       const cat = catAtual(), prod = !cat || S.temProdutos(cat), serv = !!cat && S.temServicos(cat);
       cardProd.hidden = cardProd.disabled = !prod; cardServ.hidden = cardServ.disabled = !serv;
-      el.querySelector('#titProd').textContent = serv ? 'Produtos' : 'Itens';
+      el.querySelector('#titProd').textContent = S.rotuloProdutos(cat);
       atualizarTotal();
     };
     catSel.addEventListener('change', aplicarCategoria);
@@ -968,8 +968,8 @@
       if (veic) {
         const pl = S.placas().filter(x => x.ativo);
         ccSel.removeAttribute('data-lista');
-        ccSel.innerHTML = '<option value="">' + (pl.length ? 'Selecione a placa…' : 'Nenhuma placa ativa') + '</option>' + pl.map(x => `<option value="${esc(x.placa)}">${esc(x.placa)}${x.descricao ? ' — ' + esc(x.descricao) : ''}</option>`).join('');
-        hint.textContent = pl.length ? `${pl.length} placas da frota` : 'As placas vêm da planilha da frota (aba Placas).';
+        ccSel.innerHTML = '<option value="">' + (pl.length ? 'Selecione a placa…' : 'Nenhuma placa disponível') + '</option>' + pl.map(x => `<option value="${esc(x.placa)}">${esc(x.placa)}${x.descricao ? ' — ' + esc(x.descricao) : ''}</option>`).join('');
+        hint.textContent = '';
       } else {
         ccSel.dataset.lista = 'filial';
         const fl = S.listas().filial, atual = ccSel.dataset.ant && fl.includes(ccSel.dataset.ant) ? ccSel.dataset.ant : (fl.includes(u.filial) ? u.filial : '');
@@ -1164,7 +1164,7 @@
       ${(() => {
         const prods = r.itens.filter(i => i.tipo !== 'servico'), servs = r.itens.filter(i => i.tipo === 'servico');
         const pe = `${frete ? `<tr><td colspan="3">Frete</td><td class="r num">${brl(frete)}</td></tr>` : ''}<tr><td colspan="3"><b>Total</b></td><td class="r num"><b>${brl(r.total)}</b></td></tr>`;
-        return (prods.length ? `<h3>${servs.length ? 'Produtos' : 'Itens'}</h3>
+        return (prods.length ? `<h3>${S.rotuloProdutos(r.categoria)}</h3>
       <div class="table-wrap"><table><thead><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Unit.</th><th class="r">Subtotal</th></tr></thead>
         <tbody>${prods.map(i => { const s = S.statsPreco(i.itemId, i.descricao); return `<tr><td>${esc(i.descricao)}${s && r.status !== 'comprado' ? `<div class="small muted">últ. pago ${brl(s.ultimo)} · méd. ${brl(s.media)}</div>` : ''}</td><td class="r num">${i.qtd} ${esc(i.unidade)}</td><td class="r num">${brl(i.valorUnit)}</td><td class="r num">${brl(i.qtd * i.valorUnit)}</td></tr>`; }).join('')}</tbody>
         ${servs.length ? '' : `<tfoot>${pe}</tfoot>`}</table></div>` : '') + (servs.length ? `<h3${prods.length ? ' style="margin-top:14px"' : ''}>Serviços</h3>
@@ -1668,6 +1668,7 @@
       <div class="card">
         <div class="card-head"><h2>Placas da frota</h2><span class="small muted">${S.placas().filter(x => x.ativo).length} ativas · ${S.placas().filter(x => !x.ativo).length} removidas (mantidas no histórico)</span></div>
         <p class="small muted" style="margin:-6px 0 10px">Usadas como centro de custo na modalidade <b>Manutenção de Veículos</b>. ${S.modo === 'google' ? 'São lidas da aba "Placas" da planilha da frota a cada 30 minutos.' : 'No modo demonstração há placas de exemplo.'}</p>
+        ${S.extra().placasErro ? `<div class="forn-alerta" style="margin:0 0 10px">${icon('box', 18)}<div><b>Não foi possível ler as placas</b><div class="small">${esc(S.extra().placasErro)}</div></div></div>` : ''}
         <div class="acoes" style="margin:0">${S.modo === 'google' ? '<button class="btn btn-ghost btn-sm" id="bPlacas">' + icon('sync', 15) + ' Atualizar placas agora</button>' : ''}</div>
         ${S.placas().length ? `<details style="margin-top:10px"><summary class="small">Ver placas</summary><div class="small" style="margin-top:8px;columns:2">${S.placas().map(x => `<div>${x.ativo ? '' : '<s>'}<b>${esc(x.placa)}</b>${x.descricao ? ' — ' + esc(x.descricao) : ''}${x.ativo ? '' : '</s> <span class="muted">(removida)</span>'}</div>`).join('')}</div></details>` : ''}
       </div>
