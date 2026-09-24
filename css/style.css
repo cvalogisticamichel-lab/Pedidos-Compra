@@ -420,3 +420,8 @@ button.link { background: none; border: 0; padding: 0; font: inherit; font-weigh
 .check { display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--tinta-2); margin: 14px 0; }
 .check input { width: auto; }
 @media (max-width: 760px) { .nav-grupo { display: none; } .pdf-box { flex-wrap: wrap; } }
+.txt-alerta { color: var(--pend); font-weight: 700; }
+a.kpi-link { text-decoration: none; color: inherit; display: block; }
+a.kpi-link:hover { border-color: var(--verde-500); }
+tr.click[data-id] td:first-child b { white-space: nowrap; }
+@media (max-width: 1280px) { .hide-md { display: none; } }

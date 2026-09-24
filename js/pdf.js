@@ -50,15 +50,16 @@ window.CVPdf = (function () {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const W = 210, M = 14;
     const png = await logo();
+    const pedido = ['aprovado', 'comprado'].includes(r.status) && !!r.numeroPdf;   // após autorização vira Pedido numerado
 
     // ---------- cabeçalho ----------
     if (png) doc.addImage(png, 'PNG', M, 10, 60, 16.5, 'logo-cv', 'FAST');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(...VERDE_ESC);
-    doc.text('PEDIDO DE COMPRA', W - M, 16, { align: 'right' });
-    doc.setFontSize(14); doc.setTextColor(...VERDE);
-    doc.text('Nº ' + (r.numeroPdf || r.numero), W - M, 23, { align: 'right' });
+    doc.text(pedido ? 'PEDIDO DE COMPRA' : 'ESPELHO DA SOLICITAÇÃO', W - M, 16, { align: 'right' });
+    doc.setFontSize(14); doc.setTextColor(...(pedido ? VERDE : [180, 106, 0]));
+    doc.text(pedido ? 'Nº ' + r.numeroPdf : r.numero, W - M, 23, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...CINZA);
-    doc.text('Ref. interna ' + r.numero, W - M, 28, { align: 'right' });
+    doc.text(pedido ? 'Ref. interna ' + r.numero : 'Documento de conferência — não é pedido de compra', W - M, 28, { align: 'right' });
     doc.setDrawColor(...VERDE); doc.setLineWidth(0.8); doc.line(M, 32, W - M, 32);
 
     const secao = (titulo, y) => {
@@ -78,7 +79,7 @@ window.CVPdf = (function () {
     };
 
     // ---------- dados gerais ----------
-    const statusTxt = { pendente: 'Aguardando aprovação', aprovado: 'Aprovado', comprado: 'Aprovado / Comprado', reprovado: 'Reprovado', cancelado: 'Cancelado' }[r.status] || r.status;
+    const statusTxt = { pendente: 'Aguardando autorização', aprovado: 'Aprovado', comprado: 'Aprovado / Comprado', reprovado: 'Reprovado', cancelado: 'Cancelado' }[r.status] || r.status;
     let y = secao('Dados da solicitação', 39);
     y = tabelaInfo(y, [
       ['Data da solicitação', dataHoraBR(r.criadoEm), 'Cidade', t(r.cidade)],
@@ -122,8 +123,9 @@ window.CVPdf = (function () {
 
     // ---------- orçamentos ----------
     const orcs = (r.orcamentos || []).filter(o => o.fornecedor);
+    if (!orcs.length && r.orcIncompleto) { y = secao('Orçamentos: nenhum anexado — requer autorização do Gerente', y + 7); }
     if (orcs.length) {
-      y = secao('Orçamentos considerados', y + 7);
+      y = secao('Orçamentos considerados' + (r.orcIncompleto ? ' (' + orcs.length + ' — abaixo do mínimo, requer autorização do Gerente)' : ''), y + 7);
       const vals = orcs.filter(o => Number(o.valor) > 0);
       const menor = vals.length ? vals.reduce((a, b) => (Number(b.valor) < Number(a.valor) ? b : a)) : null;
       doc.autoTable({
@@ -153,21 +155,21 @@ window.CVPdf = (function () {
     caixa(M, 'Solicitado por', r.solicitanteId, r.solicitanteNome, 'Em ' + dataBR(r.criadoEm) + (r.cidade ? ' · ' + r.cidade : ''));
     if (['aprovado', 'comprado'].includes(r.status)) caixa(M + colW + 12, 'Aprovado por', r.aprovadorId, r.aprovadorNome, (nomeNivel(r.nivelAprovador) || '') + ' · Aprovado em ' + dataBR(r.decididoEm));
     else if (r.status === 'reprovado') caixa(M + colW + 12, 'Reprovado por', r.aprovadorId, r.aprovadorNome, 'Em ' + dataBR(r.decididoEm));
-    else caixa(M + colW + 12, 'Aprovação', null, 'Aguardando aprovação', 'Alçada: ' + (nomeNivel(r.nivelNecessario) || ''));
+    else caixa(M + colW + 12, 'Autorização', null, 'Aguardando autorização', 'Alçada: ' + (nomeNivel(r.nivelNecessario) || ''));
 
     // ---------- marca d'água e rodapé ----------
     const n = doc.getNumberOfPages();
     for (let i = 1; i <= n; i++) {
       doc.setPage(i);
-      if (!['aprovado', 'comprado'].includes(r.status)) {
+      if (!pedido) {
         doc.saveGraphicsState(); doc.setGState(new doc.GState({ opacity: 0.08 }));
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(r.status === 'pendente' ? 38 : 60); doc.setTextColor(r.status === 'reprovado' ? 192 : 180, r.status === 'reprovado' ? 57 : 106, r.status === 'reprovado' ? 43 : 0);
-        doc.text(r.status === 'reprovado' ? 'REPROVADO' : r.status === 'cancelado' ? 'CANCELADO' : 'AGUARDANDO APROVAÇÃO', W / 2 - 8, 185, { align: 'center', angle: 32 });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(r.status === 'pendente' ? 30 : 60); doc.setTextColor(r.status === 'reprovado' ? 192 : 180, r.status === 'reprovado' ? 57 : 106, r.status === 'reprovado' ? 43 : 0);
+        doc.text(r.status === 'reprovado' ? 'REPROVADO' : r.status === 'cancelado' ? 'CANCELADO' : 'ESPELHO · AGUARDANDO AUTORIZAÇÃO', W / 2 - 8, 185, { align: 'center', angle: 32 });
         doc.restoreGraphicsState();
       }
       doc.setDrawColor(...LINHA); doc.setLineWidth(0.3); doc.line(M, 284, W - M, 284);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...CINZA);
-      doc.text('Cheiro Verde Ambiental · Pedido de Compra Nº ' + (r.numeroPdf || r.numero) + ' · gerado em ' + dataHoraBR(new Date().toISOString()), M, 288.5);
+      doc.text('Cheiro Verde Ambiental · ' + (pedido ? 'Pedido de Compra Nº ' + r.numeroPdf : 'Espelho da solicitação ' + r.numero) + ' · gerado em ' + dataHoraBR(new Date().toISOString()), M, 288.5);
       doc.text('Página ' + i + ' de ' + n, W - M, 288.5, { align: 'right' });
     }
     return doc.output('blob');
@@ -179,7 +181,7 @@ window.CVPdf = (function () {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
-  const nomeArquivo = r => 'Pedido de Compra ' + String(r.numeroPdf || r.numero).replace('/', '-') + '.pdf';
+  const nomeArquivo = r => (['aprovado', 'comprado'].includes(r.status) && r.numeroPdf ? 'Pedido de Compra ' + r.numeroPdf.replace('/', '-') : 'Espelho da Solicitacao ' + r.numero) + '.pdf';
 
   return { gerar, baixar, nomeArquivo, carregarLibs };
 })();

@@ -1,6 +1,6 @@
 /* Service worker — permite instalar como app e abrir offline.
    Ao publicar uma nova versão, altere CACHE para forçar atualização. */
-const CACHE = 'cv-compras-v2.5.0';
+const CACHE = 'cv-compras-v2.6.0';
 const ARQUIVOS = [
   './', './index.html', './css/style.css',
   './js/marca.js', './js/config.js', './js/engine.js', './js/store.js', './js/app.js', './js/pdf.js', './js/vendor/jspdf.umd.min.js', './js/vendor/jspdf.plugin.autotable.min.js',

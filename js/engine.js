@@ -11,7 +11,7 @@ var CVEngine = (function () {
 
   // Cada chave = nome da aba na planilha; valores = colunas (ordem da planilha)
   var TABELAS = {
-    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId'],
+    Solicitacoes: ['id', 'numero', 'criadoEm', 'solicitanteId', 'solicitanteNome', 'nivelSolicitante', 'filial', 'centroCusto', 'categoria', 'fornecedor', 'urgencia', 'dataNecessidade', 'justificativa', 'total', 'nivelNecessario', 'status', 'aprovadorId', 'aprovadorNome', 'nivelAprovador', 'decididoEm', 'compradoEm', 'fornecedorFinal', 'condicaoPagamento', 'numeroPdf', 'cidade', 'pdfUrl', 'pdfId', 'orcIncompleto', 'qtdOrcamentos'],
     Itens_Solicitacao: ['solicitacaoId', 'numero', 'seq', 'itemId', 'descricao', 'qtd', 'unidade', 'valorUnit', 'subtotal'],
     Historico: ['solicitacaoId', 'numero', 'em', 'usuario', 'acao', 'obs'],
     Orcamentos: ['id', 'solicitacaoId', 'numero', 'fornecedor', 'valor', 'arquivoNome', 'arquivoUrl', 'enviadoPor', 'em'],
@@ -242,8 +242,9 @@ var CVEngine = (function () {
       fornecedor: txt(d.fornecedor), urgencia: txt(d.urgencia), dataNecessidade: txt(d.dataNecessidade),
       justificativa: txt(d.justificativa), total: total, nivelNecessario: nivelNecessario(limites(db), total),
       status: 'pendente', aprovadorId: '', aprovadorNome: '', nivelAprovador: '', decididoEm: '', compradoEm: '', fornecedorFinal: '',
-      condicaoPagamento: txt(d.condicaoPagamento), numeroPdf: pad(proximo(db, 'seq_pdf_' + ano), 3) + '/' + ano, cidade: txt(d.cidade), pdfUrl: '', pdfId: ''
+      condicaoPagamento: txt(d.condicaoPagamento), numeroPdf: '', cidade: txt(d.cidade), pdfUrl: '', pdfId: '', orcIncompleto: !!d.orcIncompleto, qtdOrcamentos: Number(d.qtdOrcamentos) || 0
     };
+    if (r.orcIncompleto && r.nivelNecessario < 3) r.nivelNecessario = 3;   // sem os orçamentos mínimos: sempre Gerente
     db.Solicitacoes.push(r);
     itens.forEach(function (i, k) {
       if (!i.itemId) { var c = itemPorDescricao(db, i.descricao); if (c) i.itemId = c.id; }
@@ -251,11 +252,12 @@ var CVEngine = (function () {
     });
     sujar(db, 'Solicitacoes', 'Itens_Solicitacao');
     hist(db, r, u.nome, 'Solicitação criada', '', em);
-    if (r.nivelNecessario <= Number(u.nivel)) {
+    if (r.nivelNecessario <= Number(u.nivel) && !r.orcIncompleto) {
       r.status = 'aprovado'; r.aprovadorId = u.id; r.aprovadorNome = u.nome; r.nivelAprovador = Number(u.nivel); r.decididoEm = em;
-      hist(db, r, u.nome, 'Aprovado dentro da própria alçada', '', em);
+      numerarPedido(db, r, em);
+      hist(db, r, u.nome, 'Aprovado dentro da própria alçada — Pedido de Compra Nº ' + r.numeroPdf, '', em);
     } else {
-      hist(db, r, 'Sistema', 'Encaminhado para aprovação: ' + NOMES[r.nivelNecessario], '', em);
+      hist(db, r, 'Sistema', 'Aguardando autorização: ' + NOMES[r.nivelNecessario] + (r.orcIncompleto ? ' (enviada com ' + r.qtdOrcamentos + ' orçamento(s), abaixo do mínimo)' : ''), '', em);
     }
     return r;
   }
@@ -266,8 +268,15 @@ var CVEngine = (function () {
     em = em || agora();
     r.status = aprovar ? 'aprovado' : 'reprovado';
     r.aprovadorId = u.id; r.aprovadorNome = u.nome; r.nivelAprovador = Number(u.nivel); r.decididoEm = em;
+    if (aprovar) numerarPedido(db, r, em);
     sujar(db, 'Solicitacoes');
-    hist(db, r, u.nome, aprovar ? 'Aprovado' : 'Reprovado', obs, em);
+    hist(db, r, u.nome, aprovar ? 'Autorizado — Pedido de Compra Nº ' + r.numeroPdf : 'Reprovado', obs, em);
+  }
+  /** Número sequencial do Pedido de Compra (001/2026...) — só na aprovação */
+  function numerarPedido(db, r, em) {
+    if (r.numeroPdf) return;
+    var ano = String(em || agora()).slice(0, 4);
+    r.numeroPdf = pad(proximo(db, 'seq_pdf_' + ano), 3) + '/' + ano;
   }
 
   function comprar(db, r, u, fornecedor, obs, ctx, em) {
@@ -308,9 +317,10 @@ var CVEngine = (function () {
         // Orçamentos obrigatórios (mínimo definido em Configurações; padrão 3)
         var min = minOrcamentos(db);
         var orcs = (p.orcamentos || []).filter(function (o) { return txt(o.nome) || txt(o.arquivoUrl); });
-        if (orcs.length < min) erro('Anexe pelo menos ' + min + ' orçamentos para enviar a solicitação (anexados: ' + orcs.length + ').');
         orcs.forEach(function (o, i) { if (!txt(o.fornecedor)) erro('Informe o fornecedor do orçamento ' + (i + 1) + '.'); });
-        var r = criar(db, u, p.data || {}, ctx);
+        var dados = p.data || {};
+        dados.orcIncompleto = orcs.length < min; dados.qtdOrcamentos = orcs.length;   // permitido, mas vai para o Gerente
+        var r = criar(db, u, dados, ctx);
         extra.criado = { id: r.id, numero: r.numero, status: r.status, nivelNecessario: r.nivelNecessario };
         extra.orcamentosCriados = orcs.map(function (o) {
           var row = { id: ctx.uuid(), solicitacaoId: r.id, numero: r.numero, fornecedor: txt(o.fornecedor), valor: r2(o.valor), arquivoNome: txt(o.nome), arquivoUrl: txt(o.arquivoUrl), enviadoPor: u.nome, em: r.criadoEm };

@@ -15,7 +15,7 @@
   const data = iso => iso ? new Date(String(iso).length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString('pt-BR') : '—';
   const dataHora = iso => iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
   const iniciais = n => String(n).split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
-  const STATUS = { pendente: 'Pendente', aprovado: 'Aprovado', reprovado: 'Reprovado', comprado: 'Comprado', cancelado: 'Cancelado' };
+  const STATUS = { pendente: 'Aguardando autorização', aprovado: 'Aprovado', reprovado: 'Reprovado', comprado: 'Comprado', cancelado: 'Cancelado' };
   const statusTag = s => `<span class="status st-${s}">${STATUS[s] || s}</span>`;
   const opts = (arr, sel) => arr.map(v => `<option ${v === sel ? 'selected' : ''}>${esc(v)}</option>`).join('');
   const ativo = x => x.ativo !== false;
@@ -85,7 +85,7 @@
     { id: 'inicio', nome: 'Início', icon: 'home', nivel: 1 },
     { id: 'nova', nome: 'Nova solicitação', curto: 'Nova', icon: 'plus', nivel: 1 },
     { id: 'solicitacoes', nome: 'Solicitações', curto: 'Pedidos', icon: 'list', nivel: 1 },
-    { id: 'aprovacoes', nome: 'Aprovações', icon: 'check', nivel: 2 },
+    { id: 'aprovacoes', nome: 'Aguardando Autorização', curto: 'Autorização', icon: 'check', nivel: 1 },
     { id: 'itens', nome: 'Itens', icon: 'box', nivel: 1, grupo: 'Cadastros' },
     { id: 'fornecedores', nome: 'Fornecedores', icon: 'truck', nivel: 1 },
     { id: 'precos', nome: 'Histórico de preços', curto: 'Preços', icon: 'chart', nivel: 1 },
@@ -258,7 +258,7 @@
     const rota = rotaAtual();
     const disp = ROTAS.filter(r => u.nivel >= r.nivel);
     const r = disp.find(x => x.id === rota.id) || disp[0];
-    const nPend = pendentesParaMim(u).length;
+    const nPend = u.nivel >= 2 ? pendentesParaMim(u).length : S.listRequests().filter(x => x.status === 'pendente' && x.solicitanteId === u.id).length;
     const nAcessos = u.nivel >= 3 ? S.acessosPendentes() : 0;
     const nForn = u.nivel >= 3 ? S.fornecedoresPendentes() : 0;
     const nNotif = nAcessos + nForn;
@@ -470,9 +470,9 @@
       ${u.nivel >= 3 && S.fornecedoresPendentes() ? `<a class="aviso-acesso" href="#/credenciamento">${icon('truck', 20)}<div><b>${S.fornecedoresPendentes()} fornecedor(es) aguardando credenciamento</b><div class="small">Confira os dados e credencie ou recuse.</div></div><span class="btn btn-accent btn-sm">Analisar</span></a>` : ''}
       <div class="kpis">
         <div class="kpi destaque"><div class="lbl">Sua alçada</div><div class="val">${brl(lim[u.nivel])}</div><div class="sub">Aprova sozinho até este valor</div></div>
-        <div class="kpi"><div class="lbl">Minhas pendentes</div><div class="val">${minhas.filter(r => r.status === 'pendente').length}</div><div class="sub">aguardando aprovação</div></div>
+        <a class="kpi kpi-link" href="#/aprovacoes"><div class="lbl">Minhas aguardando</div><div class="val">${minhas.filter(r => r.status === 'pendente').length}</div><div class="sub">aguardando autorização</div></a>
         <div class="kpi"><div class="lbl">Solicitado no mês</div><div class="val">${brl(doMes.reduce((s, r) => s + Number(r.total), 0))}</div><div class="sub">${doMes.length} pedido(s)</div></div>
-        <div class="kpi"><div class="lbl">${u.nivel >= 2 ? 'Para eu aprovar' : 'Aguardando compra'}</div><div class="val">${u.nivel >= 2 ? pend.length : minhas.filter(r => r.status === 'aprovado').length}</div><div class="sub">${u.nivel >= 2 ? brl(pend.reduce((s, r) => s + Number(r.total), 0)) : 'aprovadas, ainda não compradas'}</div></div>
+        <div class="kpi"><div class="lbl">${u.nivel >= 2 ? 'Para eu autorizar' : 'Aguardando compra'}</div><div class="val">${u.nivel >= 2 ? pend.length : minhas.filter(r => r.status === 'aprovado').length}</div><div class="sub">${u.nivel >= 2 ? brl(pend.reduce((s, r) => s + Number(r.total), 0)) : 'aprovadas, ainda não compradas'}</div></div>
       </div>
       <div class="card">
         <div class="card-head"><h2>Alçadas de aprovação</h2></div>
@@ -481,7 +481,7 @@
           <div class="lvl"><span class="small muted">${esc(C.instanciaSuperior)}</span><b>acima de ${brl(lim[3])}</b></div>
         </div>
       </div>
-      ${u.nivel >= 2 && pend.length ? `<div class="card"><div class="card-head"><h2>Aguardando sua aprovação</h2><a href="#/aprovacoes" class="small">Ver todas</a></div>${tabela(pend.slice(0, 5))}</div>` : ''}
+      ${u.nivel >= 2 && pend.length ? `<div class="card"><div class="card-head"><h2>Aguardando sua autorização</h2><a href="#/aprovacoes" class="small">Ver todas</a></div>${tabela(pend.slice(0, 5))}</div>` : ''}
       <div class="card"><div class="card-head"><h2>Minhas últimas solicitações</h2><a href="#/solicitacoes" class="small">Ver todas</a></div>
         ${minhas.length ? tabela(minhas.slice(0, 6)) : '<div class="empty">Você ainda não criou solicitações.</div>'}
       </div>`;
@@ -492,15 +492,15 @@
   function tabela(lista, extra) {
     if (!lista.length) return '<div class="empty">Nenhuma solicitação encontrada.</div>';
     return `<div class="table-wrap"><table>
-      <thead><tr><th>Nº</th><th>Data</th><th class="hide-sm">Solicitante</th><th class="hide-sm">Centro de custo</th><th class="hide-sm">Categoria</th><th class="r">Total</th><th>Status</th>${extra ? '<th></th>' : ''}</tr></thead>
+      <thead><tr><th>Nº</th><th>Data</th><th class="hide-sm">Solicitante</th><th class="hide-sm hide-md">Centro de custo</th><th class="hide-sm hide-md">Categoria</th><th class="r">Total</th><th>Status</th>${extra ? '<th></th>' : ''}</tr></thead>
       <tbody>${lista.map(r => `<tr class="click" data-id="${r.id}">
         <td><b>${esc(r.numero)}</b>${r.orcamentos && r.orcamentos.length ? ` <span class="clip" title="${r.orcamentos.length} orçamento(s)">${icon('clip', 14)}${r.orcamentos.length}</span>` : ''}<div class="small muted">${esc(r.itens[0] ? r.itens[0].descricao : '')}${r.itens.length > 1 ? ' +' + (r.itens.length - 1) : ''}</div></td>
         <td class="num">${data(r.criadoEm)}</td>
         <td class="hide-sm">${esc(r.solicitanteNome)}</td>
-        <td class="hide-sm">${esc(r.centroCusto)}</td>
-        <td class="hide-sm">${esc(r.categoria)}</td>
+        <td class="hide-sm hide-md">${esc(r.centroCusto)}</td>
+        <td class="hide-sm hide-md">${esc(r.categoria)}</td>
         <td class="r num"><b>${brl(r.total)}</b></td>
-        <td>${statusTag(r.status)}${r.status === 'pendente' ? `<div class="small muted">→ ${esc(S.nomeNivel(r.nivelNecessario))}</div>` : ''}</td>
+        <td>${statusTag(r.status)}${r.status === 'pendente' ? `<div class="small muted">→ ${esc(S.nomeNivel(r.nivelNecessario))}${r.orcIncompleto ? ` · <span class="txt-alerta">${r.qtdOrcamentos || 0} orç.</span>` : ''}</div>` : ''}${r.numeroPdf && ['aprovado', 'comprado'].includes(r.status) ? `<div class="small muted">Pedido ${esc(r.numeroPdf)}</div>` : ''}</td>
         ${extra ? `<td>${extra(r)}</td>` : ''}
       </tr>`).join('')}</tbody></table></div>`;
   }
@@ -654,7 +654,7 @@
             <h2 class="card-titulo" style="margin:0"><span class="passo">4</span> Orçamentos</h2>
             <span class="orc-cont" id="orcCont"></span>
           </div>
-          <p class="small muted" style="margin:-6px 0 12px">Anexe ${minOrc > 0 ? `pelo menos <b>${minOrc} orçamentos</b>` : 'os orçamentos'} (PDF, foto, Word ou Excel — até 10 MB cada). O de menor valor fica destacado.</p>
+          <p class="small muted" style="margin:-6px 0 12px">Anexe ${minOrc > 0 ? `<b>${minOrc} orçamentos</b>` : 'os orçamentos'} (PDF, foto, Word ou Excel — até 10 MB cada). O de menor valor fica destacado. <b class="txt-alerta">Com menos de ${minOrc}, a solicitação pode ser enviada, mas vai para autorização do Gerente, independente do valor.</b></p>
           <div class="orc-linhas" id="orcLinhas"></div>
           <button type="button" class="btn btn-ghost btn-sm" id="addOrc" style="margin-top:10px">${icon('plus', 16)} Adicionar outro orçamento</button>
         </div>
@@ -684,9 +684,10 @@
         ln.querySelector('.menor').hidden = orcs[i] !== menor;
       });
       const btn = el.querySelector('#btnEnviar'), st = el.querySelector('#envioStatus');
-      btn.disabled = !ok;
+      btn.disabled = false;
       st.className = 'envio-status' + (ok ? ' ok' : '');
-      st.textContent = ok ? '' : `Anexe ${minOrc - n} orçamento(s) para liberar o envio`;
+      st.textContent = ok ? '' : `Com menos de ${minOrc} orçamentos, a solicitação irá para autorização do Gerente`;
+      if (typeof atualizarTotal === 'function') try { atualizarTotal(); } catch (e) { /* ainda montando */ }
     };
     const pintarOrcs = () => {
       orcBox.innerHTML = orcs.map((o, i) => `<div class="orc-linha" data-o="${i}">
@@ -838,7 +839,9 @@
       const h = el.querySelector('#hintAlcada');
       if (!total) { h.className = 'hint ok'; h.textContent = 'Informe os itens para calcular a alçada.'; return; }
       const nec = S.nivelNecessario(total);
-      if (nec <= u.nivel) { h.className = 'hint ok'; h.textContent = `✓ Dentro da sua alçada (${brl(lim[u.nivel])}) — será aprovado automaticamente.`; }
+      const faltaOrc = orcs.filter(o => o.file && o.fornecedor.trim()).length < minOrc;
+      if (faltaOrc) { h.className = 'hint warn'; h.textContent = `Menos de ${minOrc} orçamentos — irá para autorização do Gerente.`; }
+      else if (nec <= u.nivel) { h.className = 'hint ok'; h.textContent = `✓ Dentro da sua alçada (${brl(lim[u.nivel])}) — será autorizado ao enviar.`; }
       else { h.className = 'hint warn'; h.textContent = `Acima da sua alçada — seguirá para aprovação: ${S.nomeNivel(nec)}.`; }
     };
     const aoMudar = e => {
@@ -865,7 +868,8 @@
       e.preventDefault();
       const f = e.target;
       const anexos = orcs.filter(orcCompleto);
-      if (anexos.length < minOrc) { toast(`Anexe pelo menos ${minOrc} orçamentos (com fornecedor e arquivo).`, true); el.querySelector('#orcLinhas').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      if (orcs.some(o => o.file && !o.fornecedor.trim())) { toast('Informe o fornecedor de cada orçamento anexado.', true); el.querySelector('#orcLinhas').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      if (anexos.length < minOrc && !confirm(`A solicitação tem ${anexos.length} de ${minOrc} orçamentos.\n\nEla será enviada para AUTORIZAÇÃO DO GERENTE, independente do valor.\n\nDeseja enviar mesmo assim?`)) return;
       const cond = condicaoPagamento();
       if (!cond) { toast('Informe a condição de pagamento (e o prazo, se for boleto ou cartão).', true); fp.focus(); return; }
       executar(el.querySelector('#btnEnviar'), () => S.criarSolicitacao({
@@ -874,7 +878,8 @@
         condicaoPagamento: cond, cidade: cidade || f.filial.value.replace(/ \(.*\)/, '')
       }, anexos.map(o => ({ fornecedor: o.fornecedor.trim(), valor: o.valor, file: o.file }))), j => {
         const c = j.state.extra.criado;
-        return c.status === 'aprovado' ? `${c.numero} criada e aprovada na sua alçada.` : `${c.numero} enviada para aprovação (${S.nomeNivel(c.nivelNecessario)}).`;
+        const rr = j.state.requests.find(x => x.id === c.id);
+        return c.status === 'aprovado' ? `${c.numero} autorizada na sua alçada — Pedido de Compra Nº ${rr ? rr.numeroPdf : ''}.` : `${c.numero} enviada para autorização (${S.nomeNivel(c.nivelNecessario)}). Espelho gerado.`;
       }, async j => {
         const id = j.state.extra.criado.id;
         await gerarPdfPedido(id, { baixar: true });
@@ -884,11 +889,12 @@
     });
   }
 
+  const ehPedido = r => ['aprovado', 'comprado'].includes(r.status) && !!r.numeroPdf;
   // ---------- PDF do pedido ----------
   async function gerarPdfPedido(id, o) {
     o = o || {};
     const r = S.getRequest(id); if (!r) return;
-    mostrarCarregando(o.msg || `Gerando PDF do pedido ${r.numeroPdf || r.numero}…`);
+    mostrarCarregando(o.msg || (ehPedido(r) ? `Gerando o Pedido de Compra ${r.numeroPdf}…` : `Gerando o espelho da solicitação ${r.numero}…`));
     try {
       const nomeF = r.fornecedorFinal || r.fornecedor;
       const forn = S.fornecedores().find(x => S.norm(x.nome) === S.norm(nomeF)) || null;
@@ -934,17 +940,20 @@
 
   // ========== APROVAÇÕES ==========
   function vAprovacoes(el, u) {
-    const pend = pendentesParaMim(u);
-    const acima = S.listRequests().filter(r => r.status === 'pendente' && r.nivelNecessario > u.nivel);
+    const todas = S.listRequests().filter(r => r.status === 'pendente');
+    const paraMim = u.nivel >= 2 ? todas.filter(r => S.podeAprovar(u, r)) : [];
+    const minhas = todas.filter(r => r.solicitanteId === u.id && !paraMim.includes(r));
+    const acima = u.nivel >= 2 ? todas.filter(r => r.nivelNecessario > u.nivel && r.solicitanteId !== u.id) : [];
+    const acoes = r => `<div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" data-ap="${r.id}">Autorizar</button><button class="btn btn-danger btn-sm" data-rp="${r.id}">Reprovar</button></div>`;
     el.innerHTML = `
-      <div class="page-head"><div><h1>Aprovações</h1><p>Solicitações dentro da sua alçada (até ${brl(S.limiteDoNivel(u.nivel))}).</p></div></div>
-      <div class="card"><div class="card-head"><h2>Aguardando você (${pend.length})</h2></div>
-        ${tabela(pend, r => `<div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" data-ap="${r.id}">Aprovar</button><button class="btn btn-danger btn-sm" data-rp="${r.id}">Reprovar</button></div>`)}
-      </div>
+      <div class="page-head"><div><h1>Aguardando Autorização</h1><p>Solicitações enviadas que ainda não viraram pedido de compra. Após a autorização é gerado o PDF do Pedido de Compra numerado, com as assinaturas.</p></div></div>
+      ${u.nivel >= 2 ? `<div class="card"><div class="card-head"><h2>Para você autorizar (${paraMim.length})</h2><span class="small muted">alçada até ${brl(S.limiteDoNivel(u.nivel))}${u.nivel >= 3 ? ' · inclui as enviadas sem os orçamentos mínimos' : ''}</span></div>
+        ${tabela(paraMim, acoes)}</div>` : ''}
+      <div class="card"><div class="card-head"><h2>Minhas solicitações aguardando (${minhas.length})</h2></div>${tabela(minhas)}</div>
       ${acima.length ? `<div class="card"><div class="card-head"><h2>Acima da sua alçada (${acima.length})</h2><span class="small muted">somente acompanhamento</span></div>${tabela(acima)}</div>` : ''}`;
     bindLinhas(el);
-    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), 'Solicitação aprovada.',
-      async () => { await gerarPdfPedido(b.dataset.ap, { msg: 'Atualizando o PDF com a aprovação…' }); render(); }));
+    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => executar(b, () => S.act('decide', { id: b.dataset.ap, aprovar: true, obs: '' }), j => { const r = j.state.requests.find(x => x.id === b.dataset.ap); return `Autorizado — Pedido de Compra Nº ${r ? r.numeroPdf : ''}`; },
+      async () => { await gerarPdfPedido(b.dataset.ap, { baixar: true, msg: 'Gerando o Pedido de Compra com as assinaturas…' }); render(); }));
     el.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => abrirDetalhe(b.dataset.rp, 'reprovar'));
   }
 
@@ -989,9 +998,9 @@
 
       <div class="pdf-box">
         ${icon('file', 26)}
-        <div><b>Pedido de Compra Nº ${esc(r.numeroPdf || r.numero)}</b><div class="small muted">${r.pdfUrl ? 'Salvo no Drive · ' : ''}Com logo, fornecedor, itens, cidade, data da aprovação e assinaturas.</div></div>
+        <div>${ehPedido(r) ? `<b>Pedido de Compra Nº ${esc(r.numeroPdf)}</b><div class="small muted">${r.pdfUrl ? 'Salvo no Drive · ' : ''}Autorizado em ${data(r.decididoEm)} · com as assinaturas do solicitante e do aprovador.</div>` : `<b>Espelho da solicitação ${esc(r.numero)}</b><div class="small muted">${r.pdfUrl ? 'Salvo no Drive · ' : ''}Ainda não é pedido de compra. O Pedido numerado é gerado após a autorização.</div>`}</div>
         <div class="pdf-acoes">
-          <button type="button" class="btn btn-primary btn-sm" id="btnPdf">${icon('file', 15)} Baixar PDF</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btnPdf">${icon('file', 15)} ${ehPedido(r) ? 'Baixar Pedido' : 'Baixar espelho'}</button>
           ${r.pdfUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(r.pdfUrl)}" target="_blank" rel="noopener">Abrir no Drive</a>` : ''}
         </div>
       </div>
@@ -1018,7 +1027,7 @@
           <label for="obs">Observação ${podeDecidir ? '(obrigatória para reprovar)' : ''}</label>
           <textarea id="obs" placeholder="Comentário opcional…"></textarea>
           <div class="acoes">
-            ${podeDecidir ? `<button class="btn btn-primary" data-act="aprovar">Aprovar</button><button class="btn btn-danger" data-act="reprovar">Reprovar</button>` : ''}
+            ${podeDecidir ? `<button class="btn btn-primary" data-act="aprovar">Autorizar e gerar Pedido de Compra</button><button class="btn btn-danger" data-act="reprovar">Reprovar</button>` : ''}
             ${podeComprar ? `<button class="btn btn-accent" data-act="comprar">Marcar como comprado</button>` : ''}
             ${podeCancelar ? `<button class="btn btn-ghost" data-act="cancelar">Cancelar solicitação</button>` : ''}
           </div>
@@ -1038,8 +1047,8 @@
           comprar: () => S.act('markPurchased', { id: r.id, obs, fornecedor: bg.querySelector('#fornFinal').value }),
           cancelar: () => S.act('cancel', { id: r.id, obs })
         };
-        executar(b, acoes[a], { aprovar: 'Solicitação aprovada.', reprovar: 'Solicitação reprovada.', comprar: 'Compra registrada e preços salvos no histórico.', cancelar: 'Solicitação cancelada.' }[a],
-          ['aprovar', 'reprovar'].includes(a) ? async () => { await gerarPdfPedido(r.id, { msg: 'Atualizando o PDF com a aprovação…' }); render(); abrirDetalhe(r.id); } : undefined);
+        executar(b, acoes[a], { aprovar: 'Solicitação autorizada — Pedido de Compra gerado.', reprovar: 'Solicitação reprovada.', comprar: 'Compra registrada e preços salvos no histórico.', cancelar: 'Solicitação cancelada.' }[a],
+          ['aprovar', 'reprovar'].includes(a) ? async () => { await gerarPdfPedido(r.id, { baixar: a === 'aprovar', msg: a === 'aprovar' ? 'Gerando o Pedido de Compra com as assinaturas…' : 'Atualizando o espelho…' }); render(); abrirDetalhe(r.id); } : undefined);
       });
       const fo = bg.querySelector('#fOrc');
       if (fo) fo.addEventListener('submit', e => {
