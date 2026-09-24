@@ -156,18 +156,25 @@
     async consultaCnpj(cnpj) {
       const d = E.digitos(cnpj);
       if (!E.cnpjValido(d)) throw new Error('CNPJ inválido.');
-      try {
-        const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
-        const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + d, { signal: ctrl.signal });
-        clearTimeout(t);
-        if (r.status === 404) { const e = new Error('CNPJ não encontrado na Receita Federal.'); e.final = true; throw e; }
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return E.normalizarCnpj(await r.json());
-      } catch (e) {
-        if (e.final) throw e;
-        if (MODO === 'google' && token) { const j = await remoto('consultaCnpj', { token, cnpj: d }); return j.dados; }
-        throw new Error('Não foi possível consultar a Receita agora. Preencha os dados manualmente.');
+      let ultimo = 'Não foi possível consultar a Receita agora. Preencha os dados manualmente.';
+      // 1) Modo Google: o servidor consulta (CNPJá com Inscrição Estadual → BrasilAPI → ReceitaWS)
+      if (MODO === 'google' && token) {
+        try { const j = await remoto('consultaCnpj', { token, cnpj: d }); return j.dados; }
+        catch (e) { if (/não encontrado/i.test(e.message)) throw e; ultimo = e.message || ultimo; }
       }
+      // 2) Direto do navegador
+      const fontes = ['https://open.cnpja.com/office/' + d, 'https://brasilapi.com.br/api/cnpj/v1/' + d];
+      for (const url of fontes) {
+        try {
+          const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+          const r = await fetch(url, { signal: ctrl.signal });
+          clearTimeout(t);
+          if (r.status === 404) { ultimo = 'CNPJ não encontrado na Receita Federal.'; continue; }
+          if (!r.ok) continue;
+          return E.normalizarCnpj(await r.json());
+        } catch (e) { /* tenta a próxima fonte */ }
+      }
+      throw new Error(ultimo);
     },
     catalogo: () => st.catalogo.slice(),
     fornecedores: () => st.fornecedores.slice(),
