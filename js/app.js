@@ -99,7 +99,7 @@
     root.innerHTML = `
     <div class="login-wrap">
       <section class="login-hero">
-        <img class="logo-img" src="assets/logo.svg" alt="Cheiro Verde Ambiental">
+        <img class="logo-img" src="assets/logo-branco.svg" alt="Cheiro Verde Ambiental">
         <div>
           <h1>Pedidos de compra com agilidade e controle.</h1>
           <p>Solicite, aprove dentro da sua alçada e acompanhe cada compra da Cheiro Verde Ambiental em um só lugar.</p>
@@ -157,7 +157,7 @@
     root.innerHTML = `
     <div class="app">
       <aside class="sidebar">
-        <div class="brand"><img src="assets/logo.svg" alt="Cheiro Verde Ambiental"></div>
+        <div class="brand"><img src="assets/logo-branco.svg" alt="Cheiro Verde Ambiental"></div>
         <nav class="nav">
           ${disp.map(x => `<a href="#/${x.id}" class="${x.id === r.id ? 'active' : ''}">${icon(x.icon)}<span class="lbl-full">${esc(x.nome)}</span><span class="lbl-short">${esc(x.curto || x.nome)}</span>${x.id === 'aprovacoes' && nPend ? `<span class="badge">${nPend}</span>` : ''}</a>`).join('')}
         </nav>
@@ -385,22 +385,27 @@
     const itens = [novoItem()];
     const lim = S.limites();
     const addOpt = u.nivel >= 3 ? '<option value="__novo__">+ Adicionar novo…</option>' : '';
-    const sel = (tipo, label, valor) => `<div><label>${label} *</label><select name="${tipo}" data-lista="${tipo}" required><option value="">Selecione…</option>${opts(L[tipo], valor)}${addOpt}</select></div>`;
+    const sel = (tipo, label, valor) => `<div><label>${label} *</label><select name="${tipo}" data-lista="${tipo}" required><option value="">Selecione…</option>${opts(L[tipo], L[tipo].includes(valor) ? valor : '')}${addOpt}</select></div>`;
     el.innerHTML = `
-      <div class="page-head"><div><h1>Nova solicitação de compra</h1><p>Preencha os dados e os itens. O fluxo de aprovação é definido automaticamente pelo valor total.</p></div></div>
+      <div class="page-head"><div><h1>Nova solicitação de compra</h1><p>Preencha os dados, o fornecedor e os itens. O fluxo de aprovação é definido automaticamente pelo valor total.</p></div></div>
       <form id="fNova">
-        <div class="card">
-          <h2 style="margin-bottom:14px">Dados gerais</h2>
-          <div class="grid g2">
+        <div class="card card-compacto">
+          <h2 class="card-titulo"><span class="passo">1</span> Dados gerais</h2>
+          <div class="grid g3">
             ${sel('filial', 'Filial', u.filial)}
             ${sel('centroCusto', 'Centro de custo')}
             ${sel('categoria', 'Categoria')}
-            <div><label>Fornecedor sugerido</label><input name="fornecedor" placeholder="Digite 3 letras do nome ou o CNPJ"><div id="fornHint" class="campo-hint"></div></div>
           </div>
-          <div class="field" style="margin-top:14px"><label>Motivo da compra *</label><textarea name="justificativa" required placeholder="Descreva por que esta compra é necessária"></textarea></div>
+          <div class="field" style="margin:12px 0 0"><label>Motivo da compra *</label><textarea name="justificativa" rows="2" required placeholder="Descreva por que esta compra é necessária"></textarea></div>
+        </div>
+        <div class="card card-compacto">
+          <h2 class="card-titulo"><span class="passo">2</span> Fornecedor</h2>
+          <label for="inForn">Nome do fornecedor</label>
+          <input id="inForn" name="fornecedor" placeholder="Digite 3 letras do nome, nome fantasia ou CNPJ">
+          <div id="fornInfo"></div>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Itens</h2><button type="button" class="btn btn-ghost btn-sm" id="addItem">${icon('plus', 16)} Adicionar item</button></div>
+          <div class="card-head"><h2 class="card-titulo" style="margin:0"><span class="passo">3</span> Itens</h2><button type="button" class="btn btn-ghost btn-sm" id="addItem">${icon('plus', 16)} Adicionar item</button></div>
           <p class="small muted" style="margin:-6px 0 10px">Digite ao menos 3 letras da descrição para ver os itens cadastrados. O último preço pago é sugerido automaticamente.</p>
           <div class="table-wrap"><table class="itens-table">
             <thead><tr><th style="width:42%">Descrição</th><th>Qtd</th><th>Unid.</th><th>Valor unit. (R$)</th><th class="r">Subtotal</th><th></th></tr></thead>
@@ -430,25 +435,39 @@
       });
     });
 
-    // --- fornecedor sugerido ---
-    const fIn = el.querySelector('[name=fornecedor]'), fHint = el.querySelector('#fornHint');
-    const acharForn = v => S.fornecedores().find(f => semAcento(f.nome) === semAcento(v));
-    const cadastrarForn = q => formFornecedor(null, { prefill: prefillForn(q), onSaved: f => { fIn.value = f.nome; atualizarFornHint(); } });
-    const atualizarFornHint = () => {
+    // --- fornecedor ---
+    const fIn = el.querySelector('#inForn'), fInfo = el.querySelector('#fornInfo');
+    const acharForn = v => S.fornecedores().find(f => semAcento(f.nome) === semAcento(v) || (f.nomeFantasia && semAcento(f.nomeFantasia) === semAcento(v)));
+    const aoSalvarForn = f => { fIn.value = f.nome; atualizarFornInfo(); };
+    const cadastrarForn = q => formFornecedor(null, { prefill: prefillForn(q), onSaved: aoSalvarForn });
+    const atualizarFornInfo = () => {
       const v = fIn.value.trim(), f = acharForn(v);
-      if (f) { fHint.innerHTML = `<span class="ok">✓ Fornecedor cadastrado${f.cnpj ? ' · ' + esc(f.cnpj) : ''}</span>`; return; }
-      if (semAcento(v).length < 3) { fHint.innerHTML = ''; return; }
-      fHint.innerHTML = `<span class="warn">Fornecedor não cadastrado.</span> <button type="button" class="link" id="cadForn">Cadastrar agora</button>`;
-      fHint.querySelector('#cadForn').onclick = () => cadastrarForn(v);
+      if (f) {
+        const end = [f.endereco, [f.cidade, f.uf].filter(Boolean).join('/'), f.cep ? 'CEP ' + f.cep : ''].filter(Boolean).join(' · ');
+        fInfo.innerHTML = `<div class="forn-info">
+          <div class="forn-info-top"><span class="status st-aprovado">Cadastrado</span>${f.situacao && !/ATIVA/.test(f.situacao) ? situacaoTag(f.situacao) : ''}<button type="button" class="btn-mini" id="edForn">Ver / editar cadastro</button></div>
+          <div class="forn-grid">
+            <div><span>CNPJ / CPF</span>${esc(f.cnpj || '—')}</div>
+            ${f.inscricaoEstadual ? `<div><span>Inscrição estadual</span>${esc(f.inscricaoEstadual)}</div>` : ''}
+            <div class="larga"><span>Endereço</span>${esc(end || '—')}</div>
+            ${f.telefone || f.email ? `<div class="larga"><span>Contato</span>${esc([f.contato, f.telefone, f.email].filter(Boolean).join(' · '))}</div>` : ''}
+          </div></div>`;
+        fInfo.querySelector('#edForn').onclick = () => formFornecedor(f, { onSaved: aoSalvarForn });
+        return;
+      }
+      if (semAcento(v).length < 3) { fInfo.innerHTML = '<p class="small muted" style="margin:8px 0 0">Opcional. Ao escolher um fornecedor cadastrado, os dados dele aparecem aqui.</p>'; return; }
+      fInfo.innerHTML = `<div class="forn-alerta">${icon('box', 18)}<div><b>Fornecedor não cadastrado</b><div class="small">"${esc(v)}" não está na base de fornecedores.</div></div><button type="button" class="btn btn-accent btn-sm" id="cadForn">${icon('plus', 15)} Cadastrar fornecedor</button></div>`;
+      fInfo.querySelector('#cadForn').onclick = () => cadastrarForn(v);
     };
-    autocompletar(fIn, { buscar: buscarFornecedores, aoEscolher: atualizarFornHint, textoCriar: q => `Cadastrar novo fornecedor "${q}"`, aoCriar: cadastrarForn });
-    fIn.addEventListener('input', atualizarFornHint);
+    autocompletar(fIn, { buscar: buscarFornecedores, aoEscolher: atualizarFornInfo, textoCriar: q => `Cadastrar novo fornecedor "${q}"`, aoCriar: cadastrarForn });
+    fIn.addEventListener('input', atualizarFornInfo);
+    atualizarFornInfo();
 
     // --- itens ---
     const body = el.querySelector('#itensBody');
     const precoInfo = (it, i) => {
       if (!it.itemId) {
-        return semAcento(it.descricao).length >= 3 ? `<div class="campo-hint"><span class="warn">Item não cadastrado.</span> <button type="button" class="link" data-cad="${i}">Cadastrar item</button></div>` : '';
+        return semAcento(it.descricao).length >= 3 ? `<div class="campo-hint"><span class="warn">Item não cadastrado.</span> <button type="button" class="btn-mini laranja" data-cad="${i}">${icon('plus', 13)} Cadastrar item</button></div>` : '';
       }
       const s = S.statsPreco(it.itemId, it.descricao);
       if (!s) return '<div class="preco-info">✓ Item cadastrado · sem compras anteriores</div>';
@@ -470,7 +489,7 @@
       }
       const cat = el.querySelector('[name=categoria]');
       if (!cat.value && c.categoria && [...cat.options].some(o => o.value === c.categoria)) { cat.value = c.categoria; cat.dataset.ant = c.categoria; }
-      if (!fIn.value && c.fornecedorPreferido) { fIn.value = c.fornecedorPreferido; atualizarFornHint(); }
+      if (!fIn.value && c.fornecedorPreferido) { fIn.value = c.fornecedorPreferido; atualizarFornInfo(); }
       atualizarTotal();
       if (tr) tr.querySelector('[data-k=qtd]').focus();
     };
@@ -739,8 +758,8 @@
       <form id="fItem" style="margin-top:16px">
         <div class="field"><label>Descrição *</label><input name="descricao" required value="${esc(base.descricao || '')}"></div>
         <div class="grid g2">
-          <div><label>Unidade</label><select name="unidade">${opts(L.unidade, base.unidade || 'un')}</select></div>
-          <div><label>Categoria</label><select name="categoria"><option value="">—</option>${opts(L.categoria, base.categoria || '')}</select></div>
+          <div><label>Unidade</label><select name="unidade">${opts(L.unidade.includes(base.unidade || 'un') ? L.unidade : L.unidade.concat([base.unidade]), base.unidade || 'un')}</select></div>
+          <div><label>Categoria</label><select name="categoria"><option value="">—</option>${opts(!base.categoria || L.categoria.includes(base.categoria) ? L.categoria : L.categoria.concat([base.categoria]), base.categoria || '')}</select></div>
         </div>
         <div class="field" style="margin-top:14px"><label>Fornecedor preferido</label><input name="fornecedorPreferido" list="dlForn" value="${esc(base.fornecedorPreferido || '')}"></div>
         ${it ? '' : '<p class="small muted">O código (IT-0000) é gerado automaticamente.</p>'}
@@ -791,7 +810,7 @@
       box.querySelector('#lista').innerHTML = l.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Fornecedor</th><th class="hide-sm">Contato</th><th class="hide-sm">Categorias</th>${u.nivel >= 2 ? '<th class="r">Comprado</th>' : ''}<th></th></tr></thead>
         <tbody>${l.map(f => `<tr class="${ativo(f) ? '' : 'inativo'}">
-          <td><b>${esc(f.nome)}</b>${f.situacao && !/ATIVA/.test(f.situacao) ? ' ' + situacaoTag(f.situacao) : ''}<div class="small muted">${[f.nomeFantasia, f.cnpj, [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).map(esc).join(' · ')}${ativo(f) ? '' : ' · inativo'}</div></td>
+          <td><b>${esc(f.nome)}</b>${f.situacao && !/ATIVA/.test(f.situacao) ? ' ' + situacaoTag(f.situacao) : ''}<div class="small muted">${[f.nomeFantasia, f.cnpj, f.inscricaoEstadual ? 'IE ' + f.inscricaoEstadual : '', [f.cidade, f.uf].filter(Boolean).join('/')].filter(Boolean).map(esc).join(' · ')}${ativo(f) ? '' : ' · inativo'}</div></td>
           <td class="hide-sm">${esc(f.contato)}<div class="small muted">${[f.telefone, f.email].filter(Boolean).map(esc).join(' · ')}</div></td>
           <td class="hide-sm small">${esc(f.categorias)}</td>
           ${u.nivel >= 2 ? `<td class="r num">${gasto[S.norm(f.nome)] ? brl(gasto[S.norm(f.nome)]) : '—'}</td>` : ''}
@@ -822,7 +841,10 @@
         <div id="docHint" class="campo-hint"><span class="muted">Digite o CNPJ e clique em "Consultar Receita" para preencher os dados automaticamente.</span></div>
         <div id="sitBox" style="margin:10px 0">${situacaoTag(base.situacao)}${base.atividade ? `<div class="small muted" style="margin-top:4px">${esc(base.atividade)}</div>` : ''}</div>
         <div class="field"><label>Razão social *</label><input name="nome" required value="${v('nome')}"></div>
-        <div class="field"><label>Nome fantasia</label><input name="nomeFantasia" value="${v('nomeFantasia')}"></div>
+        <div class="grid g2" style="margin-bottom:14px">
+          <div><label>Nome fantasia</label><input name="nomeFantasia" value="${v('nomeFantasia')}"></div>
+          <div><label>Inscrição estadual</label><input name="inscricaoEstadual" value="${v('inscricaoEstadual')}" placeholder="Se houver"></div>
+        </div>
         <div class="field"><label>Endereço</label><input name="endereco" value="${v('endereco')}"></div>
         <div class="grid g3">
           <div><label>Cidade</label><input name="cidade" value="${v('cidade')}"></div>
@@ -853,13 +875,13 @@
         try {
           const r = await S.consultaCnpj(d);
           fm.cnpj.value = r.cnpj || fm.cnpj.value;
-          ['nome:razaoSocial', 'nomeFantasia', 'endereco', 'cidade', 'uf', 'cep', 'telefone', 'email', 'situacao', 'atividade'].forEach(par => {
+          ['nome:razaoSocial', 'nomeFantasia', 'inscricaoEstadual', 'endereco', 'cidade', 'uf', 'cep', 'telefone', 'email', 'situacao', 'atividade'].forEach(par => {
             const [campo, chave] = par.split(':'); const val = r[chave || campo];
             if (val) fm[campo].value = val;
           });
           bg.querySelector('#sitBox').innerHTML = situacaoTag(r.situacao) + (r.atividade ? `<div class="small muted" style="margin-top:4px">${esc(r.atividade)}</div>` : '');
           if (r.situacao && !/ATIVA/.test(r.situacao)) aviso('warn', `Atenção: empresa com situação "${esc(r.situacao)}" na Receita.`);
-          else aviso('ok', '✓ Dados preenchidos pela Receita Federal. Confira antes de salvar.');
+          else aviso('ok', '✓ Dados preenchidos pela Receita Federal.' + (r.inscricaoEstadual ? '' : ' Inscrição estadual não encontrada — preencha se houver.') + ' Confira antes de salvar.');
         } catch (e) { aviso('warn', esc(e.message)); }
         btn.disabled = false; btn.textContent = 'Consultar Receita';
       };
@@ -871,7 +893,7 @@
       fm.addEventListener('submit', e => {
         e.preventDefault();
         const d = { id: f ? f.id : '' };
-        ['nome', 'cnpj', 'nomeFantasia', 'endereco', 'cidade', 'uf', 'cep', 'contato', 'telefone', 'email', 'categorias', 'situacao', 'atividade'].forEach(k => { d[k] = fm[k].value; });
+        ['nome', 'cnpj', 'nomeFantasia', 'inscricaoEstadual', 'endereco', 'cidade', 'uf', 'cep', 'contato', 'telefone', 'email', 'categorias', 'situacao', 'atividade'].forEach(k => { d[k] = fm[k].value; });
         executar(fm.querySelector('button[class~="btn-primary"]'), () => S.act('saveFornecedor', { fornecedor: d }), 'Fornecedor salvo.',
           o.onSaved ? j => { fechar(); o.onSaved(j.state.extra.salvo); } : undefined);
       });
@@ -988,7 +1010,7 @@
         <div class="listas-grid">${Object.keys(NOME_LISTA).map(t => `<div class="lista-col">
           <h3>${NOME_LISTA[t]} <span class="muted small">(${S.listas()[t].length})</span></h3>
           <div class="chips">${S.listas()[t].map(v => `<span class="chip">${esc(v)}<button type="button" data-rml="${t}" data-v="${esc(v)}" title="Remover">×</button></span>`).join('')}</div>
-          <form class="addl" data-tipo="${t}"><input placeholder="Novo valor" required><button class="btn btn-ghost btn-sm">${icon('plus', 14)}</button></form>
+          <form class="addl" data-tipo="${t}"><input placeholder="Novo valor" required><button class="btn btn-ghost btn-sm">${icon('plus', 14)} Adicionar</button></form>
         </div>`).join('')}</div>
         <p class="small muted" style="margin:10px 0 0">Esses valores aparecem como opções na Nova solicitação e como listas suspensas na planilha. Remover um valor não altera pedidos já feitos.</p>
       </div>
@@ -1015,7 +1037,7 @@
             <div><label>E-mail *</label><input name="email" type="email" required></div>
             <div><label>Senha <span class="muted" id="senhaHint"></span></label><input name="senha" type="text" autocomplete="off"></div>
             <div><label>Nível</label><select name="nivel">${[1, 2, 3].map(n => `<option value="${n}">Nível 0${n} — ${esc(S.nomeNivel(n))}</option>`).join('')}</select></div>
-            <div><label>Filial</label><select name="filial">${opts(S.listas().filial)}</select></div>
+            <div><label>Filial</label><select name="filial"></select></div>
             <div style="display:flex;gap:8px;align-items:end"><button class="btn btn-primary">Salvar</button><button type="button" class="btn btn-ghost" id="cancU">Cancelar</button></div>
           </div>
         </form>
@@ -1044,7 +1066,9 @@
     const abrirForm = x => {
       fU.classList.remove('hidden'); fU.reset();
       fU.id.value = x ? x.id : ''; fU.nome.value = x ? x.nome : ''; fU.email.value = x ? x.email : '';
-      fU.nivel.value = x ? x.nivel : 1; fU.filial.value = x ? x.filial : S.listas().filial[0];
+      fU.nivel.value = x ? x.nivel : 1;
+      const fl = S.listas().filial, atual = x ? x.filial : fl[0];
+      fU.filial.innerHTML = opts(fl.includes(atual) || !atual ? fl : fl.concat([atual]), atual);
       el.querySelector('#senhaHint').textContent = x ? '(deixe em branco para manter)' : '*';
       fU.nome.focus();
     };
