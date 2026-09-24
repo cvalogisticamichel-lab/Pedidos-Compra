@@ -7,7 +7,7 @@
 window.CV_CONFIG = {
   empresa: 'Cheiro Verde Ambiental',
   sistema: 'Pedidos de Compra',
-  versao: '2.0.0',
+  versao: '2.1.0',
 
   // ========= INTEGRAÇÃO GOOGLE (Planilha + Drive) =========
   // Cole aqui a URL do App da Web do Google Apps Script (termina em /exec).
@@ -25,6 +25,9 @@ window.CV_CONFIG = {
   // Acima do limite do Gerente, o pedido fica aguardando esta instância:
   instanciaSuperior: 'Diretoria',
 
+  // Filiais, centros de custo, categorias e unidades agora vêm da aba "Listas"
+  // da planilha (ou da tela Configurações). Os valores abaixo são usados só
+  // como reserva, caso a lista não carregue.
   filiais: ['Bernardino de Campos (Matriz)', 'Assis', 'São Manuel', 'Botucatu'],
 
   centrosCusto: [
@@ -49,7 +52,6 @@ window.CV_CONFIG = {
     'Escritório'
   ],
 
-  unidadesMedida: ['un', 'cx', 'pct', 'kg', 'L', 'm', 'serv', 'h'],
+  unidadesMedida: ['un', 'cx', 'pct', 'kg', 'L', 'm', 'serv', 'h']
 
-  urgencias: ['Baixa', 'Normal', 'Alta', 'Urgente']
 };
