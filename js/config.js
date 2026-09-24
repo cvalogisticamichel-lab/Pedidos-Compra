@@ -13,7 +13,7 @@ window.CV_CONFIG = {
   // Cole aqui a URL do App da Web do Google Apps Script (termina em /exec).
   // Deixe vazio ('') para usar o modo demonstração (dados só no navegador).
   // Veja o passo a passo em GUIA-GOOGLE.txt
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbwByaWimsDi3T-4wiw7FPOFh1MqikQHSFl27uVngA7KmLbiBD2yZHyhIaDKVxoDMY2jPQ/exec',
 
   // Nomes dos níveis. Os LIMITES (R$) ficam na aba Config da planilha
   // e são alterados na tela Configurações (Gerente). Valores abaixo = referência inicial.
